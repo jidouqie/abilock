@@ -1,0 +1,1 @@
+{"method":"POST","path":"/echo","query":{"limit":3,"tag":["first","second"]},"headers":{"X-Request-Label":"coi-native"},"body":{"text":"厂商原生参数保持不变","nested":{"temperature":0.2},"items":[1,2]}}

@@ -1,0 +1,20 @@
+{
+  "repository": "Infisical/agent-vault",
+  "checked_at_utc": "2026-10-06T10:47:53.940317+00:00",
+  "metadata": {
+    "url": "https://api.github.com/repos/Infisical/agent-vault",
+    "error": "HTTP Error 403: rate limit exceeded"
+  },
+  "license": {
+    "url": "https://api.github.com/repos/Infisical/agent-vault/license",
+    "error": "HTTP Error 403: rate limit exceeded"
+  },
+  "latest_release": {
+    "url": "https://api.github.com/repos/Infisical/agent-vault/releases/latest",
+    "error": "HTTP Error 403: rate limit exceeded"
+  },
+  "head_commit": {
+    "url": "https://api.github.com/repos/Infisical/agent-vault/commits?per_page=1",
+    "error": "HTTP Error 403: rate limit exceeded"
+  }
+}

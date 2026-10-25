@@ -1,0 +1,19 @@
+{
+  "checked_date_utc": "2026-10-06",
+  "markdown_documents": 6,
+  "repository_candidates": 15,
+  "github_api_complete_records": 14,
+  "github_api_limited_candidates": [
+    "Infisical/agent-vault"
+  ],
+  "public_link_records": 44,
+  "validation": [
+    "All local Markdown links resolve",
+    "Code fences balanced",
+    "Research JSON parses",
+    "Read-only helper Python scripts parse"
+  ],
+  "errors": [],
+  "no_runtime_integration_test": true,
+  "runtime_test_reason": "Research-only scope; no components installed or deployed and no real credentials accessed"
+}

@@ -1,0 +1,56 @@
+# Deployment template. Do not give the AI identity host shell, Docker socket, this file's env, or core network access.
+# No default management password. First setup/recovery requires a trusted UI with
+# loopback socket + Host + Origin inside the core environment. Host port publishing
+# is NOT this bootstrap path. This template supplies no browser/bootstrap process;
+# review deploy/README.md before deployment. ABILOCK_ISOLATED_BIND cannot bypass setup.
+services:
+  core:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      ABILOCK_MASTER_KEY: ${ABILOCK_MASTER_KEY:?user must configure master key}
+      ABILOCK_EXEC_TOKEN: ${ABILOCK_EXEC_TOKEN:?user must configure execution capability}
+      # Existing legacy instances only, before UI migration; new instances omit it:
+      # ABILOCK_ADMIN_TOKEN: ${ABILOCK_ADMIN_TOKEN:?existing legacy token only}
+      ABILOCK_DATA_DIR: /app/data
+      ABILOCK_ADMIN_HOST: 0.0.0.0
+      ABILOCK_EXEC_HOST: 0.0.0.0
+      ABILOCK_ISOLATED_BIND: "1"
+    ports:
+      - "127.0.0.1:4317:4317"
+    volumes:
+      - core-data:/app/data
+    networks: [core-private, outbound]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+  execution-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: [node, dist/src/execution-gateway.js]
+    environment:
+      ABILOCK_CORE_URL: http://core:4318
+      ABILOCK_EXEC_TOKEN: ${ABILOCK_EXEC_TOKEN:?user must configure execution capability}
+      ABILOCK_GATEWAY_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4318:4318"
+    networks: [core-private, execution]
+    depends_on: [core]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+networks:
+  core-private:
+    internal: true
+  outbound: {}
+  execution:
+    internal: true
+volumes:
+  core-data: {}

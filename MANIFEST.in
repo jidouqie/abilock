@@ -1,0 +1,9 @@
+include LICENSE package.json package-lock.json pyproject.toml setup.py
+include request-limits.json
+include python/README.md python/build_support.py
+recursive-include python/abilock *.py
+recursive-include python/tests *.py
+include bin/*.mjs
+include node_modules/ws/package.json node_modules/ws/LICENSE
+include node_modules/ws/browser.js node_modules/ws/index.js node_modules/ws/wrapper.mjs
+recursive-include node_modules/ws/lib *.js

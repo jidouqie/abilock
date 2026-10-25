@@ -1,0 +1,41 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+!.env.example
+*.log
+/artifacts/
+/DELIVERY.md
+/docs/research/output/
+__pycache__/
+*.egg-info/
+build/
+# Generated programs, packages and per-machine receipts stay local. Source
+# installers rebuild these; the repository contains no user acceptance data.
+/desktop/macos/
+/native/prebuilt/
+/native/windows/prebuilt/
+/native/file-lock
+/skills/abilock/assets/
+**/bin/Debug/
+**/bin/Release/
+**/obj/
+**/.DS_Store
+*.zip
+*.tgz
+*.dmg
+*.pdb
+*.user
+*.suo
+
+# Runtime state and secrets are never source artifacts.
+**/service.env
+**/state.json
+**/vault.json
+**/experience.json
+**/admin-auth.json
+**/admin-auth.v2
+**/master.key
+**/installation.json
+**/backups/

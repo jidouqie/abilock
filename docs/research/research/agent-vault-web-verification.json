@@ -1,0 +1,28 @@
+{
+  "repository": "Infisical/agent-vault",
+  "checked_date_utc": "2026-10-06",
+  "github_api_status": "403 rate limit exceeded; raw errors preserved in github/Infisical__agent-vault.json",
+  "head_commit_date": null,
+  "verification_method": "Read official GitHub repository, release list and LICENSE, plus official product docs; no execution or deployment",
+  "release": {
+    "tag": "v0.40.0",
+    "url": "https://github.com/Infisical/agent-vault/releases/tag/v0.40.0",
+    "published_date": "2026-10-01",
+    "release_list_url": "https://github.com/Infisical/agent-vault/releases",
+    "observed_short_commit": "872578e",
+    "notes": "Latest label on release list; project README explicitly says Preview"
+  },
+  "license": {
+    "url": "https://github.com/Infisical/agent-vault/blob/main/LICENSE",
+    "raw_url": "https://raw.githubusercontent.com/Infisical/agent-vault/main/LICENSE",
+    "core": "MIT Expat",
+    "exceptions": "Any ee/ directories use separate ee/LICENSE; third-party components retain own licenses"
+  },
+  "official_docs": {
+    "introduction": "https://docs.agent-vault.dev/",
+    "services": "https://docs.agent-vault.dev/learn/services",
+    "permissions": "https://docs.agent-vault.dev/learn/permissions",
+    "security": "https://docs.agent-vault.dev/learn/security"
+  },
+  "limits": "Design documented, not security audited or tested in this task; proxy-role credential isolation must be validated in deployment"
+}

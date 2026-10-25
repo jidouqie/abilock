@@ -1,0 +1,4 @@
+interface:
+  display_name: "Abilock"
+  short_description: "保存 API、SSH、数据库连接与凭据，由 AI 整理和复用手册完成调用"
+  default_prompt: "使用 $abilock 读取连接的文档链接，整理或复用手册，再完成我的任务。"

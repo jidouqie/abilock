@@ -1,0 +1,1 @@
+{"method":"POST","path":"/chat/completions","body":{"model":"YOUR_CURRENT_MODEL","messages":[{"role":"user","content":"你好"}],"stream":false}}

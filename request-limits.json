@@ -1,0 +1,9 @@
+{
+  "httpDefaultTimeoutMs": 420000,
+  "httpMaxTimeoutMs": 420000,
+  "httpClientTimeoutMs": 435000,
+  "metadataClientTimeoutMs": 135000,
+  "protocolMaxTimeoutMs": 120000,
+  "isolatedShutdownGraceMs": 6500,
+  "progressIntervalMs": 30000
+}

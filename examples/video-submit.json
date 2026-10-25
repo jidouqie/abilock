@@ -1,0 +1,1 @@
+{"method":"POST","path":"/contents/generations/tasks","body":{"model":"YOUR_CURRENT_VIDEO_MODEL","content":[{"type":"text","text":"阳光照进森林"}]}}

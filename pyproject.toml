@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abilock"
+version = "2.2.11"
+description = "Discover and call external AI capabilities while Abilock keeps provider credentials."
+readme = "python/README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "吉豆茄 jidouqie" }]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Libraries",
+]
+
+[project.scripts]
+abl = "abilock.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "python" }
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["abilock"]

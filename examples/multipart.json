@@ -1,0 +1,1 @@
+{"method":"POST","path":"/echo","multipart":{"fields":{"model":"native-model"},"files":[{"field":"file","filename":"sample.txt","contentType":"text/plain","base64":"aGVsbG8="}]}}
