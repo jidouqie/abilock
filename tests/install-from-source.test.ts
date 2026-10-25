@@ -19,6 +19,20 @@ const lock = { name: "abilock", version: "2.2.11", lockfileVersion: 3, packages:
 } };
 type CommandOptions = { cwd: string; env: Record<string, string>; timeout: number };
 
+test("source CLI runs through a filesystem alias instead of exiting silently", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "abilock-source-alias-"));
+  try {
+    const actual = path.join(root, "actual"), alias = path.join(root, "alias");
+    await fs.mkdir(actual);
+    await fs.copyFile(new URL("../scripts/install-from-source.mjs", import.meta.url), path.join(actual, "install-from-source.mjs"));
+    await fs.symlink(actual, alias, "dir");
+    const result = await execute(process.execPath, [path.join(alias, "install-from-source.mjs"), "--help"]);
+    assert.match(result.stdout, /Usage: node scripts\/install-from-source\.mjs/);
+    assert.match(result.stdout, /--prepare-only/);
+    assert.equal(result.stderr, "");
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "abilock-source-test-"));
   for (const name of sources) {

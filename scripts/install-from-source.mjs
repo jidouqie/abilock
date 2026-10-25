@@ -234,7 +234,8 @@ export async function installFromSource({ root = sourceRoot, mode = "install", e
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const entryPath = process.argv[1] ? await fs.realpath(process.argv[1]).catch(() => "") : "";
+if (entryPath === await fs.realpath(fileURLToPath(import.meta.url))) {
   try {
     const options = parseSourceInstallOptions(process.argv.slice(2));
     if (options.mode === "help") console.log("Usage: node scripts/install-from-source.mjs [--check | --prepare-only | --help]\nmacOS 13+, Node.js 22.12+, npm, Git, system Python 3 and Apple command-line tools required.\n--check performs read-only prerequisites and committed-source checks.\n--prepare-only builds and validates public package integrity; it does not check host installation readiness or install.\nThe default runs full host preflight and the original Install.command once; passwords stay in macOS/application UI.");
