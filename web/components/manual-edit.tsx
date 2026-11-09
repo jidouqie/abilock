@@ -1,5 +1,6 @@
 import React from "react";
 import { Manual, publicDocUrl } from "./manual.js";
+import { FieldLabel } from "./field-label.js";
 
 export type ManualVersion = {
   title: string;
@@ -77,13 +78,13 @@ export function ManualEditor({ draft, onChange, onSubmit, busy, error,
   const canContinue = !!current && current.revision > draft.revision;
   return <form className="manual-editor" onSubmit={onSubmit}>
     <fieldset disabled={busy}>
-      <label>标题<input value={draft.title} required maxLength={200}
+      <label><FieldLabel required>标题</FieldLabel><input aria-label="标题" value={draft.title} required maxLength={200}
         onChange={(event) => onChange({ ...draft, title: event.target.value })} /></label>
       {source && <a className="manual-editor-source" href={source} target="_blank" rel="noopener noreferrer">来源 ↗</a>}
       {draft.previous && <div className="manual-history-actions">
         <button type="button" onClick={() => onChange(previousManualDraft(draft))}>用上一版填入草稿</button>
       </div>}
-      <label>正文<textarea value={draft.markdown} required maxLength={2_000_000} rows={18}
+      <label><FieldLabel required>正文</FieldLabel><textarea aria-label="正文" value={draft.markdown} required maxLength={2_000_000} rows={18}
         onChange={(event) => onChange({ ...draft, markdown: event.target.value })} /></label>
       {onLoadLatest && <section className="manual-latest" aria-label="核对最新手册">
         <div className="manual-document-heading">

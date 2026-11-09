@@ -52,7 +52,10 @@ test("every saved protocol kind has a bounded explicit plan, with no implicit pa
     assert.equal(typeof plan.supported, "boolean");
     assert(plan.provider && plan.message);
   }
-  assert.equal(planProtocolConnectionTest(connection("ssh")).supported, false);
+  const ssh = planProtocolConnectionTest(connection("ssh"));
+  assert.equal(ssh.supported, true);
+  assert.equal(ssh.level, "authentication");
+  assert.doesNotMatch(ssh.message, /指纹/);
   assert.equal(planProtocolConnectionTest(connection("s3")).billing, "possible");
   assert.equal(planProtocolConnectionTest(connection("aws", { region: "us-east-1", allowedServices: ["ec2"] })).supported, false);
   assert.equal(planProtocolConnectionTest(connection("kubernetes", { endpoint: "https://cluster.example", resources: ["secrets"] })).supported, false);

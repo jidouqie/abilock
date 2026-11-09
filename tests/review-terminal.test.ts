@@ -44,7 +44,7 @@ async function fixture(
   const dir = await fs.mkdtemp(
     path.join(os.tmpdir(), "abilock-review-terminal-"),
   );
-  const keys = ssh2.utils.generateKeyPairSync("ed25519");
+  const keys = ssh2.utils.generateKeyPairSync("ecdsa", { bits: 256 });
   const parsed = ssh2.utils.parseKey(keys.private);
   assert(!(parsed instanceof Error) && !Array.isArray(parsed));
   const hostKeySHA256 =
@@ -380,17 +380,22 @@ test(
           const clientFrames = [...observed.values()].find(
             (frames) => frames[0]?.direction === "client",
           );
-          assert(clientFrames);
-          assert.equal(clientFrames[0].type, "init");
-          assert.deepEqual(clientFrames[0].trace, {
-            invocationId: first.invocationId,
-          });
-          assert(!Object.hasOwn(clientFrames[0], "rows"));
-          assert(!Object.hasOwn(clientFrames[0], "cols"));
-          clientFrames.forEach((frame, index) => {
-            assert.equal(frame.direction, "client");
-            assert.equal(frame.sequence, index + 1);
-          });
+          // SSH starts from the authenticated upgrade and its invocation header,
+          // not from init. A same-packet shell exit can therefore close the core
+          // before the gateway forwards the CLI's init/resize frames.
+          if (!immediate) assert(clientFrames, "interactive sessions must send client frames");
+          if (clientFrames) {
+            assert.equal(clientFrames[0].type, "init");
+            assert.deepEqual(clientFrames[0].trace, {
+              invocationId: first.invocationId,
+            });
+            assert(!Object.hasOwn(clientFrames[0], "rows"));
+            assert(!Object.hasOwn(clientFrames[0], "cols"));
+            clientFrames.forEach((frame, index) => {
+              assert.equal(frame.direction, "client");
+              assert.equal(frame.sequence, index + 1);
+            });
+          }
           assert(
             stdout.includes(`operationId=${first.operationId} source=server`),
           );
@@ -409,7 +414,14 @@ test(
           assert.equal(terminalLogs[0].operationId, first.operationId);
           assert.equal(terminalLogs[0].invocationId, first.invocationId);
           assert.equal(terminalLogs[0].messagesOut, serverFrames[0].length);
-          assert.equal(terminalLogs[0].messagesIn, clientFrames.length);
+          if (immediate) {
+            // Frames already forwarded by the gateway may also arrive after
+            // session release, when receive() intentionally ignores them.
+            const received = terminalLogs[0].messagesIn;
+            assert(typeof received === "number" && Number.isInteger(received));
+            assert(received >= 0 && received <= (clientFrames?.length ?? 0));
+            assert.equal(f.inputs.length, 0, "immediate exits must not require terminal input");
+          } else assert.equal(terminalLogs[0].messagesIn, clientFrames!.length);
       } finally {
         try {
           if (child && child.exitCode === null) {

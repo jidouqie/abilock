@@ -1376,6 +1376,13 @@ label > select,
 label > textarea {
   color: var(--text);
 }
+.required-mark {
+  margin-left: 3px;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+}
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -2,7 +2,7 @@ import type { AdapterContext, AdapterResult, Connection, Operation } from "./con
 import { AppError } from "./schema.js";
 import { protocolAdapters } from "./protocols/index.js";
 import { assertTargetBoundary } from "./protocol-boundary.js";
-import { sshConnectionTestHostKey, testSSHConnection } from "./protocols/ssh.js";
+import { testSSHConnection } from "./protocols/ssh.js";
 import { awaitWithSignal } from "./async-boundary.js";
 import { kubernetesConnectionTestTarget, testKubernetesConnection } from "./protocols/containers.js";
 import { testGitConnection } from "./protocols/git.js";
@@ -51,9 +51,7 @@ export function planProtocolConnectionTest(connection: Connection): ConnectionTe
     case "ssh":
       plan.method = "SSH handshake";
       plan.level = "authentication";
-      plan.message = "核对已保存的主机指纹并验证登录；不运行命令或文件操作。";
-      try { sshConnectionTestHostKey(connection.config); }
-      catch { plan.supported = false; plan.message = "尚未保存可信主机指纹，无法安全测试；不会自动接受服务器密钥。"; }
+      plan.message = "使用已保存的地址和身份验证登录；不运行命令或文件操作。";
       break;
     case "postgres":
     case "mysql":
@@ -193,7 +191,7 @@ export async function testProtocolConnection(context: AdapterContext, options: {
     await assertTargetBoundary(connection, context.allowLocal, signal);
     if (connection.kind === "ssh") {
       await testSSHConnection(context);
-      return { ...plan, status: "verified", success: true, message: "主机指纹与登录鉴权已通过；未运行命令或文件操作。" };
+      return { ...plan, status: "verified", success: true, message: "连接与登录鉴权已通过；未运行命令或文件操作。" };
     }
     if (connection.kind === "git") {
       const result = await testGitConnection(context);

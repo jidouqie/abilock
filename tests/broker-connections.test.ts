@@ -257,7 +257,7 @@ test("独立目标声明不豁免本机/metadata地址，IP别名不能覆盖身
 });
 test("SSH WebSocket经过执行网关：鉴权、PTY resize、输入、EOF、跨chunk脱敏和真实退出码", async () => {
   const { Server, utils } = ssh2,
-    keys = utils.generateKeyPairSync("ed25519");
+    keys = utils.generateKeyPairSync("ecdsa", { bits: 256 });
   const parsed = utils.parseKey(keys.private);
   assert(!(parsed instanceof Error) && !Array.isArray(parsed));
   const fingerprint =

@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal } from "./modal.js";
 import { PasswordInput } from "./password-input.js";
+import { FieldLabel } from "./field-label.js";
 
 const logo = new URL("../assets/abilock-logo.png", import.meta.url).href;
 
@@ -47,7 +48,7 @@ export function LoginView({
         </p>
         <form onSubmit={onSubmit}>
         <label>
-          管理密码
+          <FieldLabel required>管理密码</FieldLabel>
           <PasswordInput
             aria-label="管理密码"
             value={password}
@@ -59,7 +60,7 @@ export function LoginView({
         </label>
         {initial && (
           <label>
-            确认密码
+            <FieldLabel required>确认密码</FieldLabel>
             <PasswordInput
               aria-label="确认密码"
               value={confirmation}
@@ -115,7 +116,7 @@ export function PasswordDialog({
         <fieldset disabled={busy}>
           {requireCurrent && (
             <label>
-              原密码
+              <FieldLabel required>原密码</FieldLabel>
               <PasswordInput
                 aria-label="原密码"
                 value={currentPassword}
@@ -126,7 +127,7 @@ export function PasswordDialog({
             </label>
           )}
           <label>
-            新密码
+            <FieldLabel required>新密码</FieldLabel>
             <PasswordInput
               aria-label="新密码"
               value={password}
@@ -137,7 +138,7 @@ export function PasswordDialog({
             />
           </label>
           <label>
-            确认密码
+            <FieldLabel required>确认密码</FieldLabel>
             <PasswordInput
               aria-label="确认密码"
               value={confirmation}

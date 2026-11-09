@@ -1,6 +1,7 @@
 import React from "react";
 import { connectionLabels, type ConnectionKind } from "./connection-form.js";
 import { Modal } from "./modal.js";
+import { FieldLabel } from "./field-label.js";
 import { authIdentity, type Platform } from "./platform-form.js";
 import { ConnectionTest, connectionTestUnavailable, type ConnectionTestControls } from "./connection-test.js";
 
@@ -85,8 +86,9 @@ export function PlatformEditor({
             </label>
           )}
           <label>
-            别名
+            <FieldLabel required>别名</FieldLabel>
             <input
+              aria-label="别名"
               value={edit.alias}
               required
               maxLength={32}
@@ -96,17 +98,9 @@ export function PlatformEditor({
             />
           </label>
           <label>
-            备注
+            <FieldLabel required>地址</FieldLabel>
             <input
-              value={edit.note ?? ""}
-              maxLength={200}
-              placeholder="可选，例如公司项目、个人账号"
-              onChange={(event) => onEdit({ ...edit, note: event.target.value })}
-            />
-          </label>
-          <label>
-            地址
-            <input
+              aria-label="地址"
               type="url"
               value={edit.baseUrl}
               required
@@ -144,8 +138,9 @@ export function PlatformEditor({
           </label>
           {["header", "query"].includes(edit.auth.type) && (
             <label>
-              字段名
+              <FieldLabel required>字段名</FieldLabel>
               <input
+                aria-label="字段名"
                 value={edit.auth.name ?? ""}
                 required
                 maxLength={80}
@@ -156,7 +151,7 @@ export function PlatformEditor({
           )}
           {edit.auth.type === "adapter" && (
             <label>
-              适配器
+              <FieldLabel required>适配器</FieldLabel>
               <select
                 aria-label="适配器"
                 value={edit.auth.adapter ?? ""}
@@ -176,8 +171,9 @@ export function PlatformEditor({
           )}
           {edit.auth.type === "basic" && (
             <label>
-              账号
+              <FieldLabel required={secretRequired || !!secret}>账号</FieldLabel>
               <input
+                aria-label="账号"
                 value={username}
                 required={secretRequired || !!secret}
                 autoComplete="off"
@@ -190,8 +186,11 @@ export function PlatformEditor({
           )}
           {edit.auth.type !== "none" && (
             <label>
-              {edit.auth.type === "basic" ? "密码" : "密钥"}
+              <FieldLabel required={secretRequired || (edit.auth.type === "basic" && !!username)}>
+                {edit.auth.type === "basic" ? "密码" : "密钥"}
+              </FieldLabel>
               <input
+                aria-label={edit.auth.type === "basic" ? "密码" : "密钥"}
                 type="password"
                 value={secret}
                 required={secretRequired || (edit.auth.type === "basic" && !!username)}
@@ -205,16 +204,30 @@ export function PlatformEditor({
           {edit.auth.type !== "none" && !edit.hasSecret && !secretRequired && (
             <p className="field-note">可留空保存，稍后补充；填入后才能测试或调用。</p>
           )}
-          <label>
-            API 文档
-            <input
-              type="url"
-              value={edit.documentationUrl ?? ""}
-              maxLength={1500}
-              placeholder="官方文档链接，可选"
-              onChange={(event) => onEdit({ ...edit, documentationUrl: event.target.value })}
-            />
-          </label>
+          <details className="connection-options">
+            <summary>更多选项</summary>
+            <div className="option-fields">
+              <label>
+                备注（可选）
+                <input
+                  value={edit.note ?? ""}
+                  maxLength={200}
+                  placeholder="可选，例如公司项目、个人账号"
+                  onChange={(event) => onEdit({ ...edit, note: event.target.value })}
+                />
+              </label>
+              <label>
+                API 文档（可选）
+                <input
+                  type="url"
+                  value={edit.documentationUrl ?? ""}
+                  maxLength={1500}
+                  placeholder="官方文档链接，可选"
+                  onChange={(event) => onEdit({ ...edit, documentationUrl: event.target.value })}
+                />
+              </label>
+            </div>
+          </details>
           {original && (
             <label className="check">
               <input

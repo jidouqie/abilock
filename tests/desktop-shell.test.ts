@@ -61,6 +61,74 @@ test("desktop has no arbitrary native bridge, URL argument, private-file read, o
   assert.doesNotMatch(source, /addScriptMessageHandler|evaluateJavaScript|\/private\/var\/db|service\.env|vault\.json|killall|pkill|system\(|popen\(/);
 });
 
+test("desktop close hold cancels on key release, modifier release and loss of focus", { skip: process.platform !== "darwin" }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "abilock-desktop-close-"));
+  try {
+    // Exercise the event handler and real run-loop timers without posting any
+    // keyboard events or opening a window on the user's desktop.
+    const harness = `
+#define main ABLApplicationMain
+#import ${JSON.stringify(path.resolve("native/desktop/Abilock.m"))}
+#undef main
+#include <assert.h>
+@interface TestApplication : NSApplication @end
+@implementation TestApplication
+- (BOOL)isActive { return YES; }
+@end
+@interface TestDelegate : AbilockApplication
+@property NSUInteger prompts;
+@property NSUInteger closes;
+@end
+@implementation TestDelegate
+- (void)showClosePrompt { self.prompts++; }
+- (void)confirmWindowClose:(id)sender { (void)sender; self.closes++; [self cancelCloseHold]; }
+@end
+static NSEvent *key(NSEventType type, NSEventModifierFlags flags, BOOL repeat) {
+  return [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:flags timestamp:0
+    windowNumber:0 context:nil characters:@"w" charactersIgnoringModifiers:@"w" isARepeat:repeat keyCode:13];
+}
+static void waitForTimer(void) {
+  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1.1]];
+}
+int main(void) { @autoreleasepool {
+  [TestApplication sharedApplication];
+  TestDelegate *app = [[TestDelegate alloc] init];
+  NSEvent *down = key(NSEventTypeKeyDown, NSEventModifierFlagCommand, NO);
+  assert([app handleCloseKey:down] == nil && app.closeKeyDown);
+  [app handleCloseKey:key(NSEventTypeKeyUp, NSEventModifierFlagCommand, NO)];
+  waitForTimer();
+  assert(app.prompts == 2 && app.closes == 0 && !app.closeKeyDown);
+  [app handleCloseKey:down];
+  [app handleCloseKey:key(NSEventTypeFlagsChanged, 0, NO)];
+  waitForTimer();
+  assert(app.prompts == 4 && app.closes == 0 && !app.closeKeyDown);
+  [app handleCloseKey:down];
+  [app applicationDidResignActive:[NSNotification notificationWithName:NSApplicationDidResignActiveNotification object:NSApp]];
+  waitForTimer();
+  assert(app.prompts == 5 && app.closes == 0 && !app.closeKeyDown);
+  [app handleCloseKey:key(NSEventTypeKeyDown, NSEventModifierFlagCommand, YES)];
+  assert(!app.closeKeyDown && app.closeKeyTimer == nil);
+  [app handleCloseKey:down];
+  waitForTimer();
+  assert(app.closes == 1 && !app.closeKeyDown && app.closeKeyTimer == nil);
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 100)
+    styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
+  assert(![app windowShouldClose:window]);
+  app.failed = YES;
+  assert([app windowShouldClose:window]);
+} return 0; }
+`;
+    const source = path.join(directory, "close.m");
+    const executable = path.join(directory, "close");
+    await fs.writeFile(source, harness);
+    execFileSync("/usr/bin/cc", ["-fobjc-arc", "-Wall", "-Wextra", "-Werror", "-framework", "AppKit", "-framework", "WebKit",
+      source, path.resolve("native/desktop/desktop-policy.m"), "-o", executable]);
+    execFileSync(executable, { timeout: 10000 });
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("desktop readiness pipe delivers EOF once without starving its main queue", { skip: process.platform !== "darwin" }, async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "abilock-desktop-eof-"));
   try {

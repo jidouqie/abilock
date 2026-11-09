@@ -12,16 +12,15 @@ const saved: Connection = {
     allowShell: false, remoteRoot: "/srv" },
 };
 
-test("SSH forms retain an explicit test-only fingerprint; Git SSH keeps its separate field", () => {
+test("SSH forms omit fingerprints and preserve old records; Git SSH keeps its separate field", () => {
   const fresh = blankConnection("ssh");
   assert.equal(Object.hasOwn(fresh.config, "hostKeySHA256"), false);
   const render = (connection: Connection) => renderToStaticMarkup(React.createElement(ConnectionFields, {
     connection, identity: "keep", onChange() {}, onIdentityChange() {},
   }));
-  assert.match(render(saved), /测试用主机指纹/);
-  assert.match(render(saved), /不会自动信任未知或变化的主机/);
+  assert.doesNotMatch(render(saved), /指纹/);
   const pinned = { ...saved, config: { ...saved.config, hostKeySHA256: "SHA256:" + "A".repeat(43) } };
-  assert.match(render(pinned), /SHA256:AAAAAAAA/);
+  assert.doesNotMatch(render(pinned), /指纹|SHA256:AAAAAAAA/);
   assert.equal(connectionWrite(pinned, pinned, {}, "keep").connection.config.hostKeySHA256, pinned.config.hostKeySHA256);
   const input = connectionWrite(saved, saved, {}, "keep");
   assert.deepEqual(input.connection.config, saved.config);

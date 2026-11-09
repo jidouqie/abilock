@@ -22,7 +22,9 @@ type Session = { cookie: string; csrfToken: string };
 type ProbeResult = {
   connected?: boolean;
   authenticated?: boolean;
-  hostVerified?: boolean;
+  status?: string;
+  success?: boolean;
+  message?: string;
   durationMs?: number;
   requestId: string;
   invocationId: string;
@@ -52,8 +54,6 @@ function identity() {
     }
     return {
       privateKey: keys.private,
-      hostKeySHA256: "SHA256:" + crypto.createHash("sha256").update(parsed.getPublicSSH())
-        .digest("base64").replace(/=+$/, ""),
     };
   }
   throw new Error("synthetic SSH host-key generation remained truncated");
@@ -94,7 +94,6 @@ async function wireFixture() {
   });
   return {
     port: (server.address() as AddressInfo).port,
-    hostKeySHA256: host.hostKeySHA256,
     attempts: () => attempts,
     channels: () => channels,
     clients: () => clients.size,
@@ -159,7 +158,6 @@ function sshConnection(alias: string, wire: Awaited<ReturnType<typeof wireFixtur
     description: "仅验证握手", trustBoundary: "development-fixture",
     config: {
       host: "127.0.0.1", port: wire.port, username: "fixture",
-      hostKeySHA256: wire.hostKeySHA256,
       remoteRoot: "/synthetic", fileAccess: "read",
       allowShell: false,
     },
@@ -271,7 +269,7 @@ test("SSH 连接测试只允许管理会话和 CSRF，拒绝覆盖并保留状�
     const first = await checkResponse(await request(f.server.adminUrl, route,
       { expectedRevision: saved.revision }, f.session), 200);
     assert.equal(first.connected, true);
-    assert.equal(first.hostVerified, true);
+    assert.equal(Object.hasOwn(first, "hostVerified"), false);
     assert.equal(first.authenticated, true);
     assert(Number.isFinite(first.durationMs) && first.durationMs! >= 0);
     const second = await checkResponse(await request(f.server.adminUrl, route,
@@ -334,7 +332,7 @@ test("SSH 连接测试拒绝禁用、缺凭据和非 SSH 连接，失败有独�
   });
 });
 
-test("SSH 连接测试拒绝未知和变化的主机指纹，保留保存状态", { timeout: 15000 }, async () => {
+test("SSH 连接测试无需指纹且兼容旧错误指纹，保留保存状态", { timeout: 15000 }, async () => {
   await localFixture(async (wire, f) => {
     for (const [alias, legacy] of [["NO_PIN", false], ["LEGACY_PIN", true]] as const) {
       const connection = sshConnection(alias, wire);
@@ -343,13 +341,28 @@ test("SSH 连接测试拒绝未知和变化的主机指纹，保留保存状态"
       const saved = await f.store.saveConnection(connection, { password }, false, 0);
       const before = await fs.readFile(path.join(f.dir, "state.json"), "utf8");
       const result = await checkResponse(await request(f.server.adminUrl,
-        `/admin/connections/${alias}/test`, { expectedRevision: saved.revision }, f.session), legacy ? 502 : 400);
-      assert.equal(result.error?.code, legacy ? "SSH_TEST_HOST_KEY_MISMATCH" : "SSH_TEST_HOST_KEY_REQUIRED");
-      assert.equal(result.authenticated, undefined);
+        `/admin/connections/${alias}/test`, { expectedRevision: saved.revision }, f.session), 200);
+      assert.equal(result.connected, true);
+      assert.equal(result.authenticated, true);
+      assert.equal(Object.hasOwn(result, "hostVerified"), false);
+      const planResponse = await fetch(f.server.adminUrl + `/admin/connections/${alias}/test-plan`, {
+        headers: { cookie: f.session.cookie },
+      });
+      assert.equal(planResponse.status, 200);
+      const plan = await planResponse.json() as { supported: boolean; level: string; message: string };
+      assert.equal(plan.supported, true);
+      assert.equal(plan.level, "authentication");
+      assert.doesNotMatch(plan.message, /指纹/);
+      const unified = await checkResponse(await request(f.server.adminUrl,
+        `/admin/connections/${alias}/connection-test`, { expectedRevision: saved.revision }, f.session), 200);
+      assert.equal(unified.status, "verified");
+      assert.equal(unified.success, true);
+      assert.doesNotMatch(unified.message!, /指纹/);
+      assert.equal(Object.hasOwn(unified, "hostVerified"), false);
       assert.equal(await fs.readFile(path.join(f.dir, "state.json"), "utf8"), before);
     }
     await eventually(() => wire.clients() === 0);
-    assert.equal(wire.attempts(), 1);
+    assert.equal(wire.attempts(), 4);
     assert.equal(wire.channels(), 0);
   });
 });

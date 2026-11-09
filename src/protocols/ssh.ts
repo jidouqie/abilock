@@ -279,9 +279,8 @@ function connectionTestError(
   return new AppError(status, code, message);
 }
 
-/** Tests never discover, accept or update a host identity on the caller's behalf. */
-export function sshConnectionTestHostKey(config: Record<string, unknown>): string {
-  const pin = config.hostKeySHA256;
+/** Git SSH retains its independently saved host pin. Direct SSH never uses it. */
+function connectionTestHostKey(pin: unknown): string {
   if (typeof pin !== "string" || !/^SHA256:[A-Za-z0-9+/]{43}$/.test(pin))
     problem("SSH_TEST_HOST_KEY_REQUIRED", connectionTestErrors.SSH_TEST_HOST_KEY_REQUIRED[1]);
   const digest = Buffer.from(pin.slice(7), "base64");
@@ -295,12 +294,8 @@ async function connect(
   context: AdapterContext,
   signal: AbortSignal,
   diagnostic?: ConnectionTestState,
+  expectedHostKey?: string,
 ) {
-  // Ordinary execution retains its existing compatibility policy. A connection
-  // test uses the explicitly saved pin and must fail before DNS if it is absent.
-  const expectedHostKey = diagnostic
-    ? sshConnectionTestHostKey(context.connection.config)
-    : undefined;
   const c = config(context.connection);
   secrets(context.secret);
   aborted(signal);
@@ -401,18 +396,17 @@ async function connect(
   }
 }
 
-/** Verify the saved host pin, then authenticate without opening any channel. */
-export async function testSSHConnection(context: AdapterContext): Promise<{
+/** Authenticate without opening any command, file or forwarding channel. */
+async function testSSHAuthentication(context: AdapterContext, expectedHostKey?: string): Promise<{
   connected: true;
   authenticated: true;
-  hostVerified: true;
 }> {
   const diagnostic: ConnectionTestState = { phase: "dns" };
   try {
-    const session = await connect(context, context.signal, diagnostic);
+    const session = await connect(context, context.signal, diagnostic, expectedHostKey);
     try {
       aborted(context.signal);
-      return { connected: true, authenticated: true, hostVerified: true };
+      return { connected: true, authenticated: true };
     } finally {
       session.close();
       await session.closed;
@@ -420,6 +414,16 @@ export async function testSSHConnection(context: AdapterContext): Promise<{
   } catch (error) {
     throw connectionTestError(error, diagnostic, context.signal);
   }
+}
+
+/** Direct SSH, including tests, ignores the retired hostKeySHA256 field. */
+export function testSSHConnection(context: AdapterContext) {
+  return testSSHAuthentication(context);
+}
+
+/** Git SSH verifies its own saved pin before authenticating, with no channels. */
+export function testPinnedSSHConnection(context: AdapterContext, savedHostKey: string) {
+  return testSSHAuthentication(context, connectionTestHostKey(savedHostKey));
 }
 
 const localFlags =

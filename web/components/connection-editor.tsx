@@ -8,6 +8,7 @@ import {
 } from "./connection-form.js";
 import { Modal } from "./modal.js";
 import { PrivateKeyFile } from "./private-key-file.js";
+import { FieldLabel } from "./field-label.js";
 import {
   ConnectionTest,
   connectionTestUnavailable,
@@ -67,6 +68,65 @@ export function ConnectionEditor({
     ((original.config.auth ?? original.config.authType) !==
       (edit.config.auth ?? edit.config.authType) ||
       original.config.transport !== edit.config.transport);
+  const fields = credentialFields(edit, sshIdentity);
+  const renderCredential = (field: (typeof fields)[number]) => {
+    const required =
+      field.required &&
+      (!edit.hasSecret ||
+        changedAuth ||
+        replacing ||
+        ((edit.kind === "ssh" ||
+          (edit.kind === "git" && edit.config.transport === "ssh")) &&
+          sshIdentity !== "keep"));
+    const retaining = edit.hasSecret && !changedAuth && !required && !replacing &&
+      !((edit.kind === "ssh" || (edit.kind === "git" && edit.config.transport === "ssh")) && sshIdentity !== "keep");
+    const placeholder = retaining ? "全部留空保留已保存凭据" : !field.required ? "可留空" : "";
+    const label = `${field.label}${!field.required ? "（可选）" : retaining ? "（留空保留）" : ""}`;
+    const update = (value: string) =>
+      onSecrets((current) => ({ ...current, [field.key]: value }));
+    return (
+      <label key={field.key}>
+        <FieldLabel required={required}>
+          {label}
+        </FieldLabel>
+        {field.multiline ? (
+          <textarea
+            aria-label={label}
+            value={secrets[field.key] ?? ""}
+            rows={4}
+            required={required}
+            maxLength={100000}
+            autoComplete="off"
+            placeholder={placeholder}
+            onChange={(event) => update(event.target.value)}
+          />
+        ) : (
+          <input
+            aria-label={label}
+            type="password"
+            value={secrets[field.key] ?? ""}
+            required={required}
+            maxLength={100000}
+            autoComplete="off"
+            placeholder={placeholder}
+            onChange={(event) => update(event.target.value)}
+          />
+        )}
+        {field.key === "privateKey" && (
+          <PrivateKeyFile
+            disabled={busy}
+            onReading={onKeyReading}
+            onError={onKeyError}
+            onValue={(value) => {
+              onKeyError(""); // A newly read key clears an earlier read error.
+              update(value);
+            }}
+          />
+        )}
+        {field.note && <small className="field-note">{field.note}</small>}
+      </label>
+    );
+  };
   return (
     <Modal
       title={original ? "编辑" : "添加"}
@@ -77,7 +137,7 @@ export function ConnectionEditor({
       {configurationAlert}
       <form onSubmit={onSubmit}>
         <fieldset disabled={busy || keyReading || !configurationReady}>
-          <label>
+          {!original && <label>
             类型
             <select
               aria-label="类型"
@@ -92,10 +152,11 @@ export function ConnectionEditor({
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
           <label>
-            别名
+            <FieldLabel required>别名</FieldLabel>
             <input
+              aria-label="别名"
               value={edit.alias}
               required
               maxLength={32}
@@ -104,81 +165,51 @@ export function ConnectionEditor({
               onChange={(event) => onEdit({ ...edit, alias: event.target.value })}
             />
           </label>
-          <label>
-            备注
-            <input
-              value={edit.note ?? ""}
-              maxLength={200}
-              placeholder="可选，例如公司项目、个人账号"
-              onChange={(event) => onEdit({ ...edit, note: event.target.value })}
-            />
-          </label>
           <ConnectionFields
             connection={edit}
             onChange={onFieldsChange}
             identity={sshIdentity}
             onIdentityChange={onIdentity}
+            section="basic"
           />
-          {credentialFields(edit, sshIdentity).map((field) => {
-            const required =
-              field.required &&
-              (!edit.hasSecret ||
-                changedAuth ||
-                replacing ||
-                ((edit.kind === "ssh" ||
-                  (edit.kind === "git" && edit.config.transport === "ssh")) &&
-                  sshIdentity !== "keep"));
-            const placeholder = edit.hasSecret && !changedAuth ? "留空保留" : "";
-            const update = (value: string) =>
-              onSecrets((current) => ({ ...current, [field.key]: value }));
-            return (
-              <label key={field.key}>
-                {field.label}
-                {field.multiline ? (
-                  <textarea
-                    value={secrets[field.key] ?? ""}
-                    rows={4}
-                    required={required}
-                    maxLength={100000}
-                    autoComplete="off"
-                    placeholder={placeholder}
-                    onChange={(event) => update(event.target.value)}
-                  />
-                ) : (
-                  <input
-                    type="password"
-                    value={secrets[field.key] ?? ""}
-                    required={required}
-                    maxLength={100000}
-                    autoComplete="off"
-                    placeholder={placeholder}
-                    onChange={(event) => update(event.target.value)}
-                  />
-                )}
-                {field.key === "privateKey" && (
-                  <PrivateKeyFile
-                    disabled={busy}
-                    onReading={onKeyReading}
-                    onError={onKeyError}
-                    onValue={(value) => {
-                      onKeyError(""); // A newly read key clears an earlier read error.
-                      update(value);
-                    }}
-                  />
-                )}
+          {fields.filter((field) => !field.advanced).map(renderCredential)}
+          {original?.hasSecret && replacing && fields.some((field) => field.advanced) && (
+            <p className="field-note" role="status">
+              保存会更换整组凭据；如使用了{fields.filter((field) => field.advanced).map((field) => field.label).join("、")}，请在更多选项中一并填写。
+            </p>
+          )}
+          <details className="connection-options">
+            <summary>更多选项</summary>
+            <div className="option-fields">
+              <ConnectionFields
+                connection={edit}
+                onChange={onFieldsChange}
+                identity={sshIdentity}
+                onIdentityChange={onIdentity}
+                section="advanced"
+              />
+              {fields.filter((field) => field.advanced).map(renderCredential)}
+              <label>
+                备注（可选）
+                <input
+                  value={edit.note ?? ""}
+                  maxLength={200}
+                  placeholder="可留空，例如公司项目、个人账号"
+                  onChange={(event) => onEdit({ ...edit, note: event.target.value })}
+                />
               </label>
-            );
-          })}
-          <label>
-            文档
-            <input
-              type="url"
-              value={edit.documentationUrl ?? ""}
-              maxLength={1500}
-              placeholder="官方文档链接，可选"
-              onChange={(event) => onEdit({ ...edit, documentationUrl: event.target.value })}
-            />
-          </label>
+              <label>
+                文档（可选）
+                <input
+                  type="url"
+                  value={edit.documentationUrl ?? ""}
+                  maxLength={1500}
+                  placeholder="官方文档链接，可留空"
+                  onChange={(event) => onEdit({ ...edit, documentationUrl: event.target.value })}
+                />
+              </label>
+            </div>
+          </details>
           {original && (
             <label className="check">
               <input
@@ -192,6 +223,7 @@ export function ConnectionEditor({
           {edit.trustBoundary !== "development-fixture" && (
             <label className="check trust-check">
               <input
+                aria-label="远端无权管理 Abilock 所在电脑"
                 type="checkbox"
                 required
                 checked={edit.trustBoundary === "independent-target"}
@@ -202,7 +234,7 @@ export function ConnectionEditor({
                   })
                 }
               />
-              远端无权管理 Abilock 所在电脑
+              <FieldLabel required>远端无权管理 Abilock 所在电脑</FieldLabel>
             </label>
           )}
         </fieldset>

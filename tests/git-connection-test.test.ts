@@ -212,6 +212,12 @@ test("Git SSH probe uses its saved pin, authenticates, and opens no command, fil
     await assert.rejects(testGitConnection({ ...context, connection: changed }), { code: "SSH_TEST_HOST_KEY_MISMATCH" });
     assert.equal(authCount, 1, "changed host key must fail before credential authentication");
     assert.equal(channels, 0);
+    for (const pin of [undefined, "", "SHA256:malformed"]) {
+      const missing = structuredClone(context.connection);
+      missing.config.hostKeySha256 = pin;
+      await assert.rejects(testGitConnection({ ...context, connection: missing }), { code: "GIT_CONFIG" });
+    }
+    assert.equal(authCount, 1, "missing or malformed Git pins must fail before authentication");
   } finally {
     for (const client of clients) client.end();
     await new Promise<void>((resolve) => server.close(() => resolve()));

@@ -19,7 +19,7 @@ $projectPath = Join-Path $PSScriptRoot 'Abilock.Desktop.csproj'
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $packagePath = Join-Path $PSScriptRoot '..\..\..\package.json'
     if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) { throw 'Specify the release Version when building outside the project tree.' }
-    $Version = (Get-Content -LiteralPath $packagePath -Raw | ConvertFrom-Json).version
+    $Version = (Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json).version
 }
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version.' }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {

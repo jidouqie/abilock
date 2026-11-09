@@ -32,7 +32,7 @@ import {
   gitManifestPathsAllowed,
 } from "./git-manifest-policy.js";
 import { productionGitRuntime, type GitRuntime } from "./git-runtime.js";
-import { testSSHConnection } from "./ssh.js";
+import { testPinnedSSHConnection } from "./ssh.js";
 import { readBounded } from "../transport.js";
 const { Client } = ssh2;
 
@@ -272,17 +272,16 @@ export async function testGitConnection(context: AdapterContext): Promise<{
   if (config.transport === "ssh") {
     // Reuse the strict handshake-only probe, retaining Git's independent saved
     // pin and identity. No git-upload-pack or other remote channel is opened.
-    await testSSHConnection({
+    await testPinnedSSHConnection({
       ...context,
       connection: {
         ...context.connection, kind: "ssh",
         config: {
           host: config.host, port: config.port, username: config.username,
-          hostKeySHA256: config.hostKeySha256.replace(/=+$/, ""),
           remoteRoot: "/", fileAccess: "read", allowShell: false,
         },
       },
-    });
+    }, config.hostKeySha256.replace(/=+$/, ""));
     return {
       status: "verified", level: "authentication",
       message: "Git SSH 主机指纹与登录鉴权通过；未运行远端命令，仓库权限尚未验证。",

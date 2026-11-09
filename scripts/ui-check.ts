@@ -1,4 +1,4 @@
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type Page, type Locator } from "playwright";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -78,6 +78,35 @@ function row(page: Page, alias: string) {
     has: page.getByText(alias, { exact: true }),
   });
 }
+async function assertRequiredMarkers(scope: Locator) {
+  const failures = await scope.evaluate((root) => {
+    const errors: string[] = [];
+    for (const control of root.querySelectorAll("input:required, textarea:required, select:required")) {
+      const marker = control.closest("label")?.querySelector(".required-mark");
+      if (!marker) errors.push(`missing marker: ${control.tagName}`);
+    }
+    for (const marker of root.querySelectorAll(".required-mark")) {
+      const label = marker.closest("label");
+      if (label && !label.querySelector("input:required, textarea:required, select:required"))
+        errors.push("optional label has a required marker");
+      if (marker.getAttribute("aria-hidden") !== "true" || marker.textContent !== "*")
+        errors.push("marker changes accessible field name");
+      const style = getComputedStyle(marker);
+      const color = style.color.match(/[\d.]+/g)?.map(Number) ?? [];
+      if (parseFloat(style.fontSize) > 12 || color[0] <= color[1] || color[0] <= color[2])
+        errors.push("marker is not a small red asterisk");
+    }
+    return errors;
+  });
+  assert.deepEqual(failures, []);
+}
+
+async function showOptions(dialog: Locator) {
+  const options = dialog.locator("details.connection-options");
+  if (await options.getAttribute("open") === null)
+    await options.getByText("更多选项", { exact: true }).click();
+}
+
 async function add(
   page: Page,
   alias: string,
@@ -89,15 +118,16 @@ async function add(
   await dialog.getByLabel("类型", { exact: true }).selectOption("api");
   await dialog.getByLabel("别名", { exact: true }).fill(alias);
   const note = alias === "UI_BEARER" ? "公司项目" : "个人账号";
-  await dialog.getByLabel("备注", { exact: true }).fill(note);
-  assert.equal(await dialog.getByLabel("备注", { exact: true }).getAttribute("maxlength"), "200");
+  await showOptions(dialog);
+  await dialog.getByLabel("备注（可选）", { exact: true }).fill(note);
+  assert.equal(await dialog.getByLabel("备注（可选）", { exact: true }).getAttribute("maxlength"), "200");
   await dialog.getByLabel("地址", { exact: true }).fill(fakeProvider);
   await dialog.getByLabel("鉴权", { exact: true }).selectOption(type);
   if (type === "header")
     await dialog.getByLabel("字段名", { exact: true }).fill("X-API-Key");
   await dialog.getByLabel("密钥", { exact: true }).fill(key);
   await dialog
-    .getByLabel("API 文档", { exact: true })
+    .getByLabel("API 文档（可选）", { exact: true })
     .fill(fakeDocumentationUrl);
   await dialog.getByRole("button", { name: "保存", exact: true }).click();
   await dialog.waitFor({ state: "hidden" });
@@ -225,6 +255,60 @@ async function updateMockSecret(page: Page, alias: string, key: string) {
   checks.push(`${alias}: UI只写鉴权，CLI调用loopback fixture并脱敏`);
 }
 
+async function checkSimplifiedForms(page: Page) {
+  for (const kind of ["api", "ssh", "postgres", "mysql", "redis", "git", "s3", "aws", "docker", "registry", "kubernetes"]) {
+    await page.getByRole("button", { name: "添加", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "添加", exact: true });
+    await dialog.getByLabel("类型", { exact: true }).selectOption(kind);
+    await assertRequiredMarkers(dialog);
+    const options = dialog.locator("details.connection-options");
+    assert.equal(await options.count(), 1, `${kind}: one optional settings group`);
+    assert.equal(await options.getAttribute("open"), null);
+    assert.equal(await dialog.getByLabel("备注（可选）", { exact: true }).isVisible(), false);
+    const documentation = dialog.getByLabel(kind === "api" ? "API 文档（可选）" : "文档（可选）", { exact: true });
+    assert.equal(await documentation.isVisible(), false);
+    if (["ssh", "postgres", "mysql", "redis"].includes(kind))
+      assert.equal(await dialog.getByLabel("端口", { exact: true }).isVisible(), false);
+    if (kind === "postgres")
+      assert.equal(await dialog.locator('input[type="password"]').first().getAttribute("required"), "");
+    if (kind === "redis") {
+      assert.equal(await dialog.getByLabel(/^账号/).isVisible(), false);
+      assert.equal(await dialog.getByLabel("数据库编号", { exact: true }).isVisible(), false);
+    }
+    if (["s3", "aws"].includes(kind))
+      assert.equal(await dialog.locator('input[type="password"]:visible').count(), 2);
+    if (kind === "s3") {
+      await dialog.getByLabel("平台", { exact: true }).selectOption("r2");
+      assert.equal(await dialog.getByLabel("区域", { exact: true }).count(), 0);
+    }
+    if (["postgres", "s3", "kubernetes"].includes(kind))
+      await page.screenshot({ path: `artifacts/ui-2.2.11/simple-${kind}.png`, fullPage: true, animations: "disabled" });
+    await showOptions(dialog);
+    await dialog.getByLabel("备注（可选）", { exact: true }).fill(`synthetic-${kind}-draft`);
+    assert.equal(await documentation.isVisible(), true);
+    if (kind === "mysql") {
+      const tls = dialog.getByLabel("TLS", { exact: true });
+      await dialog.getByLabel("主机", { exact: true }).fill("192.0.2.10");
+      const name = dialog.getByLabel(/^TLS 证书域名/);
+      assert.equal(await name.isVisible(), true);
+      assert.equal(await name.getAttribute("required"), "");
+      await assertRequiredMarkers(dialog);
+      await name.fill("database.example.test");
+      await tls.uncheck();
+      await assertRequiredMarkers(dialog);
+      assert.equal(await dialog.getByLabel(/^TLS 证书域名/).count(), 0);
+      await tls.check();
+      assert.equal(await dialog.getByLabel(/^TLS 证书域名/).inputValue(), "database.example.test");
+    }
+    await options.getByText("更多选项", { exact: true }).click();
+    assert.equal(await dialog.getByLabel("备注（可选）", { exact: true }).inputValue(), `synthetic-${kind}-draft`);
+    assert.equal(await dialog.getByLabel("备注（可选）", { exact: true }).isVisible(), false);
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+  }
+  checks.push("全部11类表单仅显示主要连接信息；必填字段有小红星并随TLS等条件变化，可选项无星，更多选项保留草稿和范围");
+}
+
 async function checkSshTestControls(page: Page) {
   // UI responses are synthetic. This does not establish a real SSH session.
   let calls = 0;
@@ -234,9 +318,9 @@ async function checkSshTestControls(page: Page) {
   const plan = () => ({ alias: "UI_SSH", revision: store.connection("ssh", "UI_SSH").revision,
     kind: "ssh", supported: true, provider: "SSH", method: "SSH handshake", path: null,
     level: "authentication", billing: "none", model: null,
-    message: "核对主机指纹并验证登录，不执行远端命令。" });
+    message: "验证登录，不执行远端命令。" });
   const result = () => ({ ...plan(), status: "verified", success: true,
-    message: "主机指纹与登录鉴权已通过；未运行命令或文件操作。", durationMs: 12 });
+    message: "登录鉴权已通过；未运行命令或文件操作。", durationMs: 12 });
   await page.route("**/admin/connections/UI_SSH/test-plan", (route) => route.fulfill({
     contentType: "application/json", body: JSON.stringify(plan()),
   }));
@@ -267,10 +351,21 @@ async function checkSshTestControls(page: Page) {
   const edit = page.getByRole("dialog", { name: "编辑", exact: true });
   const test = edit.getByRole("button", { name: "测试连接", exact: true });
   assert.equal(await test.isEnabled(), true);
-  await edit.getByLabel("备注", { exact: true }).fill("Changed unsaved note");
+  assert.equal(await edit.getByText(/主机指纹/).count(), 0);
+  await showOptions(edit);
+  assert.equal(await edit.getByLabel("文档（可选）", { exact: true }).getAttribute("required"), null);
+  await edit.getByLabel("鉴权", { exact: true }).selectOption("privateKey");
+  const passphrase = edit.locator('input[type="password"]');
+  assert.equal(await passphrase.getAttribute("required"), null);
+  assert.equal(await passphrase.getAttribute("placeholder"), "可留空");
+  await edit.getByText("仅加密私钥需要填写。创建私钥时未设置密码，请留空。", { exact: true }).waitFor();
+  assert.equal(await edit.locator("textarea").first().getAttribute("placeholder"), "");
+  assert.equal(await edit.locator("textarea").first().getAttribute("required"), "");
+  await edit.getByLabel("鉴权", { exact: true }).selectOption("keep");
+  await edit.getByLabel("备注（可选）", { exact: true }).fill("Changed unsaved note");
   assert.equal(await test.isDisabled(), true);
   await edit.getByText("保存后测试", { exact: true }).waitFor();
-  await edit.getByLabel("备注", { exact: true }).fill("合成连接");
+  await edit.getByLabel("备注（可选）", { exact: true }).fill("合成连接");
   await edit.getByLabel("鉴权", { exact: true }).selectOption("password");
   await edit.getByLabel("密码", { exact: true }).fill("synthetic-unsaved-ui-password");
   assert.equal(await test.isDisabled(), true);
@@ -549,6 +644,7 @@ try {
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(service.adminUrl);
+  await assertRequiredMarkers(page.locator("main.login"));
   await page.getByLabel("管理密码", { exact: true }).fill("1234567");
   await page.getByLabel("确认密码", { exact: true }).fill("1234567");
   await page.getByRole("button", { name: "保存", exact: true }).click();
@@ -566,6 +662,7 @@ try {
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await page.getByRole("heading", { name: "连接", exact: true }).waitFor();
 
+  await checkSimplifiedForms(page);
   await add(page, "UI_BEARER", "bearer", MOCK_BEARER);
   await add(page, "UI_HEADER", "header", MOCK_HEADER);
   await checkSshTestControls(page);
@@ -598,9 +695,10 @@ try {
   const edit = page.getByRole("dialog", { name: "编辑", exact: true });
   assert.equal(await edit.getByLabel("密钥", { exact: true }).inputValue(), "");
   assert.equal(await edit.locator('input:not([type="checkbox"])').count(), 5);
-  assert.equal(await edit.getByLabel("备注", { exact: true }).inputValue(), "公司项目");
+  await showOptions(edit);
+  assert.equal(await edit.getByLabel("备注（可选）", { exact: true }).inputValue(), "公司项目");
   assert.equal(
-    await edit.getByLabel("API 文档", { exact: true }).inputValue(),
+    await edit.getByLabel("API 文档（可选）", { exact: true }).inputValue(),
     fakeDocumentationUrl,
   );
   assert.equal(await edit.locator("textarea").count(), 0);
@@ -617,7 +715,8 @@ try {
     .click();
   assert.equal(await edit.getByLabel("密钥", { exact: true }).inputValue(), "");
   const before = store.platform("UI_BEARER");
-  await edit.getByLabel("备注", { exact: true }).fill("公司文案");
+  await showOptions(edit);
+  await edit.getByLabel("备注（可选）", { exact: true }).fill("公司文案");
   await edit.getByRole("button", { name: "保存", exact: true }).click();
   await edit.waitFor({ state: "hidden" });
   const after = store.platform("UI_BEARER");

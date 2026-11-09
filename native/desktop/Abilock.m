@@ -10,6 +10,8 @@ static NSString *const ABLLauncher = @"/private/tmp/abilock-desktop-mac-fixture/
 static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
 #endif
 
+static const NSTimeInterval ABLCloseHoldDuration = 1.0;
+
 @interface AbilockApplication : NSObject <NSApplicationDelegate, NSWindowDelegate,
   WKNavigationDelegate, WKUIDelegate>
 @property(strong) NSWindow *window;
@@ -21,6 +23,14 @@ static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
 @property(strong) NSURL *origin;
 @property BOOL stopping;
 @property BOOL failed;
+@property(strong) NSView *closeHint;
+@property(strong) NSTimer *closeHintTimer;
+@property(strong) NSTimer *closeKeyTimer;
+@property(strong) id closeKeyMonitor;
+@property(strong) id focusObserver;
+@property unsigned short closeKeyCode;
+@property BOOL closeKeyDown;
+@property BOOL closeAuthorized;
 @end
 
 @implementation AbilockApplication
@@ -32,6 +42,13 @@ static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
   NSMenu *applicationMenu = [[NSMenu alloc] initWithTitle:@"Abilock"];
   [applicationMenu addItemWithTitle:@"Quit Abilock" action:@selector(terminate:) keyEquivalent:@"q"];
   applicationItem.submenu = applicationMenu;
+  NSMenuItem *fileItem = [[NSMenuItem alloc] init];
+  [menu addItem:fileItem];
+  NSMenu *file = [[NSMenu alloc] initWithTitle:@"File"];
+  // The menu and shortcut both address this window and its owned session.
+  NSMenuItem *closeItem = [file addItemWithTitle:@"Close Window" action:@selector(requestWindowClose:) keyEquivalent:@"w"];
+  closeItem.target = self;
+  fileItem.submenu = file;
   NSMenuItem *editItem = [[NSMenuItem alloc] init];
   [menu addItem:editItem];
   NSMenu *edit = [[NSMenu alloc] initWithTitle:@"Edit"];
@@ -58,7 +75,119 @@ static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
   [self.window.contentView addSubview:loading];
   [self.window makeKeyAndOrderFront:nil];
   [NSApp activateIgnoringOtherApps:YES];
+  __weak AbilockApplication *weakSelf = self;
+  self.closeKeyMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:
+    NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged handler:^NSEvent *(NSEvent *event) {
+    return [weakSelf handleCloseKey:event];
+  }];
+  self.focusObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidResignKeyNotification
+    object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *notice) {
+    AbilockApplication *app = weakSelf;
+    if (notice.object == app.window) { [app cancelCloseHold]; [app hideClosePrompt]; }
+  }];
   [self startConfiguration];
+}
+
+- (void)cancelCloseHold {
+  [self.closeKeyTimer invalidate];
+  self.closeKeyTimer = nil;
+  self.closeKeyDown = NO;
+}
+
+- (void)applicationDidResignActive:(NSNotification *)notification {
+  (void)notification;
+  [self cancelCloseHold];
+  [self hideClosePrompt];
+}
+
+- (NSEvent *)handleCloseKey:(NSEvent *)event {
+  if (self.stopping) return event;
+  NSEventModifierFlags modifiers = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
+    NSEventModifierFlagOption | NSEventModifierFlagShift);
+  if (event.type == NSEventTypeFlagsChanged && self.closeKeyDown && modifiers != NSEventModifierFlagCommand) {
+    [self cancelCloseHold];
+    [self showClosePrompt];
+    return event;
+  }
+  if (event.type == NSEventTypeKeyUp && self.closeKeyDown && event.keyCode == self.closeKeyCode) {
+    [self cancelCloseHold];
+    [self showClosePrompt];
+    return nil;
+  }
+  if (event.window != self.window) return event;
+  if (event.type != NSEventTypeKeyDown || modifiers != NSEventModifierFlagCommand ||
+      ![event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"w"]) return event;
+  if (!self.closeKeyDown && !event.isARepeat) {
+    [self showClosePrompt];
+    self.closeKeyDown = YES;
+    self.closeKeyCode = event.keyCode;
+    __weak AbilockApplication *weakSelf = self;
+    self.closeKeyTimer = [NSTimer timerWithTimeInterval:ABLCloseHoldDuration repeats:NO block:^(NSTimer *timer) {
+      (void)timer;
+      AbilockApplication *app = weakSelf;
+      if (app.closeKeyDown && NSApp.active) [app confirmWindowClose:nil];
+    }];
+    [[NSRunLoop mainRunLoop] addTimer:self.closeKeyTimer forMode:NSRunLoopCommonModes];
+  }
+  return nil;
+}
+
+- (void)requestWindowClose:(id)sender {
+  (void)sender;
+  [self.window performClose:nil];
+}
+
+- (void)hideClosePrompt {
+  [self.closeHintTimer invalidate];
+  self.closeHintTimer = nil;
+  [self.closeHint removeFromSuperview];
+  self.closeHint = nil;
+}
+
+- (void)showClosePrompt {
+  if (self.stopping || self.failed || self.window.attachedSheet) return;
+  [self hideClosePrompt];
+  NSView *content = self.window.contentView;
+  NSView *hint = [[NSView alloc] initWithFrame:NSZeroRect];
+  hint.translatesAutoresizingMaskIntoConstraints = NO;
+  hint.wantsLayer = YES;
+  hint.layer.backgroundColor = [NSColor colorWithWhite:0.16 alpha:0.92].CGColor;
+  hint.layer.cornerRadius = 12;
+  NSTextField *label = [NSTextField labelWithString:@"按住 ⌘W 键即可关闭"];
+  label.frame = NSMakeRect(12, 15, 276, 24);
+  label.font = [NSFont boldSystemFontOfSize:18];
+  label.textColor = NSColor.whiteColor;
+  label.alignment = NSTextAlignmentCenter;
+  [hint addSubview:label];
+  [content addSubview:hint];
+  [NSLayoutConstraint activateConstraints:@[
+    [hint.centerXAnchor constraintEqualToAnchor:content.centerXAnchor],
+    [hint.topAnchor constraintEqualToAnchor:content.topAnchor constant:24],
+    [hint.widthAnchor constraintEqualToConstant:300],
+    [hint.heightAnchor constraintEqualToConstant:54],
+  ]];
+  self.closeHint = hint;
+  __weak AbilockApplication *weakSelf = self;
+  self.closeHintTimer = [NSTimer timerWithTimeInterval:2.0 repeats:NO block:^(NSTimer *timer) {
+    (void)timer;
+    [weakSelf hideClosePrompt];
+  }];
+  [[NSRunLoop mainRunLoop] addTimer:self.closeHintTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)confirmWindowClose:(id)sender {
+  (void)sender;
+  [self cancelCloseHold];
+  self.closeAuthorized = YES;
+  [self hideClosePrompt];
+  [self.window performClose:nil];
+}
+
+- (BOOL)windowShouldClose:(NSWindow *)sender {
+  (void)sender;
+  if (self.closeAuthorized || self.stopping || self.failed) return YES;
+  [self showClosePrompt];
+  return NO;
 }
 
 - (void)showFailure:(NSString *)message {
@@ -173,6 +302,7 @@ static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
   self.webView.UIDelegate = self;
   self.webView.allowsBackForwardNavigationGestures = NO;
   self.window.contentView = self.webView;
+  if (self.closeHint) [self showClosePrompt];
   [self.webView loadRequest:[NSURLRequest requestWithURL:url]];
 }
 
@@ -251,7 +381,8 @@ static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
   BOOL loaded = [[NSString stringWithContentsOfFile:@"/private/tmp/abilock-desktop-mac-fixture/window-loaded.txt" encoding:NSUTF8StringEncoding error:NULL] isEqualToString:@"loaded"];
   BOOL workerExited = !self.configuration.running && [[NSFileManager defaultManager] fileExistsAtPath:@"/private/tmp/abilock-desktop-mac-fixture/fixture-stopped.txt"];
   NSData *report = [NSJSONSerialization dataWithJSONObject:@{@"fixtureOnly":@YES,
-    @"pageLoaded":@(loaded), @"workerExited":@(workerExited), @"passed":@((BOOL)(loaded && workerExited))} options:NSJSONWritingPrettyPrinted error:NULL];
+    @"pageLoaded":@(loaded), @"workerExited":@(workerExited), @"closeAuthorized":@(self.closeAuthorized),
+    @"passed":@((BOOL)(loaded && workerExited))} options:NSJSONWritingPrettyPrinted error:NULL];
   [report writeToFile:@"/private/tmp/abilock-desktop-mac-fixture/smoke-report.json" atomically:YES];
 }
 #endif
@@ -274,6 +405,7 @@ static NSString *const ABLLauncher = @"/usr/local/libexec/abilock/launch";
   (void)sender;
   if (self.stopping) return self.configuration.running ? NSTerminateCancel : NSTerminateNow;
   self.stopping = YES;
+  [self cancelCloseHold];
   self.output.fileHandleForReading.readabilityHandler = nil;
   [self.webView stopLoading];
   [self closeConfigurationInput];

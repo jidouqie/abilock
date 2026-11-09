@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
 import dns from "node:dns/promises";
 import { getEventListeners } from "node:events";
 import net from "node:net";
 import test from "node:test";
 import ssh2, { type Connection as SSHConnection } from "ssh2";
 import type { AdapterContext, Credentials } from "../src/connections.js";
-import { sshAdapter, sshConnectionTestHostKey, testSSHConnection } from "../src/protocols/ssh.js";
+import { sshAdapter, testSSHConnection } from "../src/protocols/ssh.js";
 import { AppError } from "../src/schema.js";
 
 const { Server, utils } = ssh2;
@@ -25,8 +24,6 @@ function parsedKey(value: string) {
   return parsed;
 }
 const publicKey = parsedKey(identity.public);
-const hostKeySHA256 = "SHA256:" + crypto.createHash("sha256")
-  .update(parsedKey(host.public).getPublicSSH()).digest("base64").replace(/=+$/, "");
 
 function context(port: number, signal = new AbortController().signal): AdapterContext {
   return {
@@ -40,7 +37,6 @@ function context(port: number, signal = new AbortController().signal): AdapterCo
         host: "127.0.0.1",
         port,
         username: "fixture",
-        hostKeySHA256,
         // Authentication tests do not require shell or file permissions.
         remoteRoot: "/never-read",
         allowShell: false,
@@ -102,7 +98,7 @@ async function fixture() {
   };
 }
 
-test("SSH连接测试先核对保存的主机指纹，再以密码或加密私钥鉴权且连接完全退出", async () => {
+test("SSH连接测试无需主机指纹，以密码或加密私钥鉴权且连接完全退出", async () => {
   const f = await fixture();
   try {
     const credentials: Credentials[] = [{ password }, { privateKey: identity.private, passphrase }];
@@ -111,7 +107,6 @@ test("SSH连接测试先核对保存的主机指纹，再以密码或加密私�
       assert.deepEqual(await testSSHConnection({ ...f.context, secret, signal }), {
         connected: true,
         authenticated: true,
-        hostVerified: true,
       });
       await f.idle();
       assert.equal(getEventListeners(signal, "abort").length, 0);
@@ -120,44 +115,29 @@ test("SSH连接测试先核对保存的主机指纹，再以密码或加密私�
   } finally { await f.close(); }
 });
 
-test("SSH连接测试拒绝变化的主机指纹，鉴权前停止且不修改记录", async () => {
+test("SSH连接测试兼容忽略旧主机指纹，不修改记录或放宽其他配置", async () => {
   const f = await fixture();
   try {
-    const legacy = {
-      ...f.context,
-      connection: {
-        ...f.context.connection,
-        config: { ...f.context.connection.config, hostKeySHA256: "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
-      },
-    };
-    await assert.rejects(testSSHConnection(legacy), {
-      code: "SSH_TEST_HOST_KEY_MISMATCH", message: "SSH主机指纹不匹配，已停止连接",
-    });
-    await f.idle();
-    assert.equal(f.authenticationRequests, 0, "credentials must not be sent to a changed host");
-    assert.equal(legacy.connection.config.hostKeySHA256, "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-    assert.deepEqual(legacy.secret, { password });
-    assert.throws(() => sshAdapter.validate({
-      ...legacy.connection,
-      config: { ...legacy.connection.config, localCommand: "must-not-run" },
-    }, legacy.secret), { code: "SSH_CONFIG" });
+    for (const pin of [undefined, "", "SHA256:malformed", "SHA256:" + "A".repeat(43), 42]) {
+      const legacy = {
+        ...f.context,
+        connection: {
+          ...f.context.connection,
+          config: { ...f.context.connection.config, hostKeySHA256: pin },
+        },
+      };
+      const before = structuredClone(legacy.connection);
+      assert.deepEqual(await testSSHConnection(legacy), { connected: true, authenticated: true });
+      await f.idle();
+      assert.deepEqual(legacy.connection, before);
+      assert.deepEqual(legacy.secret, { password });
+      assert.throws(() => sshAdapter.validate({
+        ...legacy.connection,
+        config: { ...legacy.connection.config, localCommand: "must-not-run" },
+      }, legacy.secret), { code: "SSH_CONFIG" });
+    }
+    assert(f.authenticationRequests > 0);
   } finally { await f.close(); }
-});
-
-test("SSH连接测试缺失或无效主机指纹时不解析地址、不建socket、不自动信任", async (t) => {
-  const lookup = t.mock.method(dns, "lookup", () => { throw new Error("unexpected DNS"); });
-  const sockets = t.mock.method(net, "connect", () => { throw new Error("unexpected transport"); });
-  for (const pin of [undefined, "", "SHA256:malformed", "SHA256:" + "A".repeat(42) + "B", 42]) {
-    const ctx = context(22);
-    ctx.connection.config.hostKeySHA256 = pin;
-    await assert.rejects(testSSHConnection(ctx), {
-      code: "SSH_TEST_HOST_KEY_REQUIRED", message: "请先保存通过可信渠道核对的SSH主机指纹",
-    });
-    assert.equal(ctx.connection.config.hostKeySHA256, pin);
-  }
-  assert.equal(lookup.mock.callCount(), 0);
-  assert.equal(sockets.mock.callCount(), 0);
-  assert.equal(sshConnectionTestHostKey({ hostKeySHA256 }).length, 64);
 });
 
 test("SSH连接测试鉴权失败仅返回固定诊断，不回显凭据", async () => {

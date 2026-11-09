@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ConnectionKind } from "../../src/protocol-kinds.js";
+import { FieldLabel } from "./field-label.js";
 
 export type { ConnectionKind };
 export type Connection = {
@@ -165,6 +166,8 @@ type SecretField = {
   label: string;
   required?: boolean;
   multiline?: boolean;
+  note?: string;
+  advanced?: boolean;
 };
 export function credentialFields(
   connection: Connection,
@@ -181,22 +184,46 @@ export function credentialFields(
       ? [{ key: "password", label: "密码", required: true }]
       : [
           { key: "privateKey", label: "私钥", required: true, multiline: true },
-          { key: "passphrase", label: "口令" },
+          {
+            key: "passphrase",
+            label: "私钥密码",
+            advanced: true,
+            note: "仅加密私钥需要填写。创建私钥时未设置密码，请留空。",
+          },
         ];
   }
   if (["postgres", "mysql", "redis"].includes(connection.kind))
-    return [{ key: "password", label: "密码" }];
+    return [
+      {
+        key: "password",
+        label: "密码",
+        ...(connection.kind === "postgres" ? { required: true } : {}),
+      },
+    ];
   if (["s3", "aws"].includes(connection.kind))
     return [
-      { key: "accessKeyId", label: "ID", required: true },
-      { key: "secretAccessKey", label: "密钥", required: true },
-      { key: "sessionToken", label: "令牌" },
+      { key: "accessKeyId", label: "Access Key ID", required: true },
+      { key: "secretAccessKey", label: "Secret Access Key", required: true },
+      {
+        key: "sessionToken",
+        label: "临时会话令牌",
+        advanced: true,
+        note: "仅使用临时访问凭据时填写 Session Token。",
+      },
     ];
   if (auth === "bearer")
     return [
       { key: "token", label: "Token", required: true },
       ...(connection.kind === "kubernetes"
-        ? [{ key: "ca", label: "CA", multiline: true }]
+        ? [
+            {
+              key: "ca",
+              label: "CA 证书",
+              multiline: true,
+              advanced: true,
+              note: "仅使用自签名证书或私有 CA 的服务需要填写 PEM 证书。",
+            },
+          ]
         : []),
     ];
   if (auth === "basic")
@@ -204,15 +231,34 @@ export function credentialFields(
       { key: "username", label: "账号", required: true },
       { key: "password", label: "密码", required: true },
       ...(connection.kind === "docker"
-        ? [{ key: "ca", label: "CA", multiline: true }]
+        ? [
+            {
+              key: "ca",
+              label: "CA 证书",
+              multiline: true,
+              advanced: true,
+              note: "仅使用自签名证书或私有 CA 的服务需要填写 PEM 证书。",
+            },
+          ]
         : []),
     ];
   if (auth === "mtls")
     return [
-      { key: "cert", label: "证书", multiline: true, required: true },
+      { key: "cert", label: "客户端证书", multiline: true, required: true },
       { key: "key", label: "私钥", multiline: true, required: true },
-      { key: "ca", label: "CA", multiline: true },
-      { key: "passphrase", label: "口令" },
+      {
+        key: "ca",
+        label: "CA 证书",
+        multiline: true,
+        advanced: true,
+        note: "仅使用自签名证书或私有 CA 的服务需要填写 PEM 证书。",
+      },
+      {
+        key: "passphrase",
+        label: "私钥密码",
+        advanced: true,
+        note: "仅加密私钥需要填写。创建私钥时未设置密码，请留空。",
+      },
     ];
   return [];
 }
@@ -290,18 +336,53 @@ export function connectionWrite(
     clearSecret,
   };
 }
+function isIpTarget(host: string): boolean {
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host))
+    return host
+      .split(".")
+      .every((part) => Number(part) <= 255 && String(Number(part)) === part);
+  const [address, zone, ...extra] = host.split("%");
+  if (
+    !address.includes(":") ||
+    !/^[0-9a-fA-F:.]+$/.test(address) ||
+    extra.length ||
+    (zone !== undefined && !/^[0-9a-zA-Z.:-]+$/.test(zone))
+  )
+    return false;
+  try {
+    return new URL(`http://[${address}]/`).hostname.startsWith("[");
+  } catch {
+    return false;
+  }
+}
+
 export function ConnectionFields({
   connection,
   onChange,
   identity,
   onIdentityChange,
+  section = "all",
 }: {
   connection: Connection;
   onChange: (connection: Connection) => void;
   identity: string;
   onIdentityChange: (identity: string) => void;
+  section?: "basic" | "advanced" | "all";
 }) {
   const config = connection.config;
+  const renderFields = (basic: ReactNode, advanced: ReactNode) => {
+    if (section === "basic") return basic;
+    if (section === "advanced") return advanced;
+    return (
+      <>
+        {basic}
+        <details>
+          <summary>更多选项</summary>
+          <div className="option-fields">{advanced}</div>
+        </details>
+      </>
+    );
+  };
   const change = (key: string, value: unknown) => {
     const next = { ...config };
     if (value === "" || value === undefined) delete next[key];
@@ -316,11 +397,13 @@ export function ConnectionFields({
       placeholder?: string;
       type?: string;
       maxLength?: number;
+      note?: string;
     } = {},
   ) => (
     <label key={key}>
-      {label}
+      <FieldLabel required={options.required}>{label}</FieldLabel>
       <input
+        aria-label={label}
         type={options.type ?? "text"}
         value={typeof config[key] === "string" ? (config[key] as string) : ""}
         required={options.required}
@@ -328,6 +411,7 @@ export function ConnectionFields({
         placeholder={options.placeholder}
         onChange={(event) => change(key, event.target.value)}
       />
+      {options.note && <small className="field-note">{options.note}</small>}
     </label>
   );
   const number = (key: string, label: string, max = 65535, min = 1) => (
@@ -338,7 +422,7 @@ export function ConnectionFields({
         value={typeof config[key] === "number" ? (config[key] as number) : ""}
         min={min}
         max={max}
-        required
+        placeholder={`留空使用 ${key === "port" && connection.kind === "git" ? 22 : defaults[connection.kind][key]}`}
         onChange={(event) =>
           change(
             key,
@@ -447,7 +531,7 @@ export function ConnectionFields({
     <>
       {check("trustedPrivate", "内网连接")}
       <label>
-        CA
+        CA 证书（可选）
         <textarea
           value={String(config.ca ?? "")}
           rows={3}
@@ -472,88 +556,96 @@ export function ConnectionFields({
       </select>
     </label>
   );
+  const tlsEnabled = config.tls !== false;
+  const host = typeof config.host === "string" ? config.host : "";
+  const mysqlTlsNameRequired =
+    connection.kind === "mysql" && tlsEnabled && isIpTarget(host);
   const tlsOptions = (
     <>
       {check("tls", "TLS", true)}
-      {text("serverName", "TLS 域名", { placeholder: "可选" })}
-      <label>
-        CA
-        <textarea
-          value={String(config.ca ?? "")}
-          rows={3}
-          maxLength={100000}
-          onChange={(event) => change("ca", event.target.value)}
-        />
-      </label>
+      {tlsEnabled && (
+        <>
+          {!mysqlTlsNameRequired &&
+            text("serverName", "TLS 证书域名（可选）", {
+              placeholder: "仅连接地址与证书域名不同时填写",
+              maxLength: 253,
+            })}
+          <label>
+            CA 证书（可选）
+            <textarea
+              value={String(config.ca ?? "")}
+              rows={3}
+              maxLength={100000}
+              placeholder="仅使用自签名证书或私有 CA 时填写 PEM 证书"
+              onChange={(event) => change("ca", event.target.value)}
+            />
+          </label>
+        </>
+      )}
     </>
   );
   if (connection.kind === "ssh")
-    return (
+    return renderFields(
       <>
         {text("host", "主机", {
           required: true,
           placeholder: "ssh.example.com",
         })}
-        <div className="field-row">
-          {number("port", "端口")}
-          {text("username", "账号", { required: true, maxLength: 128 })}
-        </div>
+        {text("username", "账号", { required: true, maxLength: 128 })}
         {sshIdentity}
-        <label>
-          测试用主机指纹
-          <input
-            value={String(config.hostKeySHA256 ?? "")}
-            maxLength={60}
-            placeholder="SHA256:…"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => change("hostKeySHA256", event.target.value.trim())}
-          />
-          <small className="field-note">连接测试必填。请从服务器管理员等可信渠道取得；不会自动信任未知或变化的主机。</small>
-        </label>
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">
-            {text("remoteRoot", "目录", { required: true })}
-            {select(
-              "fileAccess",
-              "文件",
-              [
-                ["read", "只读"],
-                ["readwrite", "读写"],
-              ],
-              "read",
-            )}
-            {check("allowShell", "执行命令", true)}
-          </div>
-        </details>
-      </>
+      </>,
+      <>
+        {number("port", "端口")}
+        {text("remoteRoot", "目录", { placeholder: "留空使用 /" })}
+        {select(
+          "fileAccess",
+          "文件",
+          [
+            ["read", "只读"],
+            ["readwrite", "读写"],
+          ],
+          "read",
+        )}
+        {check("allowShell", "执行命令", true)}
+      </>,
     );
   if (["postgres", "mysql", "redis"].includes(connection.kind))
-    return (
+    return renderFields(
       <>
         {text("host", "主机", {
           required: true,
           placeholder: "db.example.com",
         })}
-        <div className="field-row">
-          {number("port", "端口")}
-          {connection.kind === "redis"
-            ? number("database", "数据库", 2147483647, 0)
-            : text("database", "数据库", { required: true, maxLength: 128 })}
-        </div>
-        {connection.kind === "redis"
-          ? text("username", "账号", { placeholder: "可选", maxLength: 128 })
-          : text("user", "账号", { required: true, maxLength: 128 })}
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">{tlsOptions}</div>
-        </details>
-      </>
+        {connection.kind !== "redis" && (
+          <>
+            {text("database", "数据库", { required: true, maxLength: 128 })}
+            {text("user", "账号", { required: true, maxLength: 128 })}
+          </>
+        )}
+        {mysqlTlsNameRequired &&
+          text("serverName", "TLS 证书域名", {
+            required: true,
+            placeholder: "使用 IP 连接且启用 TLS 时，填写证书中的域名",
+            maxLength: 253,
+          })}
+      </>,
+      <>
+        {number("port", "端口")}
+        {connection.kind === "redis" && (
+          <>
+            {text("username", "账号（可选）", {
+              placeholder: "仅使用指定 ACL 用户时填写",
+              maxLength: 128,
+            })}
+            {number("database", "数据库编号", 2147483647, 0)}
+          </>
+        )}
+        {tlsOptions}
+      </>,
     );
   if (connection.kind === "git") {
     const ssh = config.transport === "ssh";
-    return (
+    return renderFields(
       <>
         {select(
           "transport",
@@ -600,10 +692,7 @@ export function ConnectionFields({
         {ssh ? (
           <>
             {text("host", "主机", { required: true })}
-            <div className="field-row">
-              {number("port", "端口")}
-              {text("username", "账号", { required: true })}
-            </div>
+            {text("username", "账号", { required: true })}
             {text("path", "仓库", {
               required: true,
               placeholder: "org/repo.git",
@@ -638,36 +727,34 @@ export function ConnectionFields({
               })}
           </>
         )}
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">
-            {text("authorName", "作者", {
-              placeholder: "Abilock",
-              maxLength: 100,
-            })}
-            {text("authorEmail", "邮箱", {
-              type: "email",
-              placeholder: "abilock@localhost.invalid",
-              maxLength: 200,
-            })}
-            {!ssh && (
-              <label>
-                CA
-                <textarea
-                  value={String(config.ca ?? "")}
-                  rows={3}
-                  maxLength={200000}
-                  onChange={(event) => change("ca", event.target.value)}
-                />
-              </label>
-            )}
-          </div>
-        </details>
-      </>
+      </>,
+      <>
+        {ssh && number("port", "端口")}
+        {text("authorName", "提交作者（可选）", {
+          placeholder: "Abilock",
+          maxLength: 100,
+        })}
+        {text("authorEmail", "提交邮箱（可选）", {
+          type: "email",
+          placeholder: "abilock@localhost.invalid",
+          maxLength: 200,
+        })}
+        {!ssh && (
+          <label>
+            CA 证书（可选）
+            <textarea
+              value={String(config.ca ?? "")}
+              rows={3}
+              maxLength={200000}
+              onChange={(event) => change("ca", event.target.value)}
+            />
+          </label>
+        )}
+      </>,
     );
   }
   if (connection.kind === "s3")
-    return (
+    return renderFields(
       <>
         {select(
           "provider",
@@ -685,7 +772,8 @@ export function ConnectionFields({
                 // Private-network trust and a custom CA apply only to self-hosted S3.
                 ...Object.fromEntries(
                   Object.entries(config).filter(
-                    ([key]) => value === "s3" || !["trustedPrivate", "ca"].includes(key),
+                    ([key]) =>
+                      value === "s3" || !["trustedPrivate", "ca"].includes(key),
                   ),
                 ),
                 provider: value,
@@ -701,32 +789,33 @@ export function ConnectionFields({
         {text("endpoint", "地址", {
           required: true,
           type: "url",
-          placeholder: "https://s3.us-east-1.amazonaws.com",
+          placeholder: "平台提供的 HTTPS Endpoint",
         })}
-        <div className="field-row">
-          {text("region", "区域", { required: true })}
+        <div className={config.provider === "r2" ? undefined : "field-row"}>
+          {config.provider !== "r2" &&
+            text("region", "区域", { required: true })}
           {text("bucket", "桶", { required: true })}
         </div>
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">
-            {text("prefix", "目录", { placeholder: "可选，以 / 结尾" })}
-            {choices("allowedCommands", "命令", objectCommands, objectCommands)}
-            {(config.provider ?? "s3") === "s3" && privateServiceOptions}
-          </div>
-        </details>
-      </>
+      </>,
+      <>
+        {text("prefix", "对象前缀（可选）", {
+          placeholder: "例如 project/",
+          note: "留空表示整个桶；填写时以 / 结尾。",
+        })}
+        {choices("allowedCommands", "命令", objectCommands, objectCommands)}
+        {(config.provider ?? "s3") === "s3" && privateServiceOptions}
+      </>,
     );
   if (connection.kind === "aws") {
     const endpoints = config.endpoints as Record<string, string> | undefined;
     const services = Array.isArray(config.allowedServices)
       ? (config.allowedServices as string[])
       : [];
-    return (
+    return renderFields(
       <>
         {text("region", "区域", { required: true })}
         <div className="services-field">
-          <span>服务</span>
+          <FieldLabel required>服务</FieldLabel>
           {[
             ["sts", "STS"],
             ["ec2", "EC2"],
@@ -750,42 +839,37 @@ export function ConnectionFields({
           ))}
         </div>
         {services.includes("s3api") && text("bucket", "桶", { required: true })}
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">
-            {services.map((service) => (
-              <label key={service}>
-                {service.toUpperCase()} 地址
-                <input
-                  type="url"
-                  value={endpoints?.[service] ?? ""}
-                  placeholder="官方地址"
-                  maxLength={1000}
-                  onChange={(event) => {
-                    const next = { ...endpoints };
-                    if (event.target.value) next[service] = event.target.value;
-                    else delete next[service];
-                    change("endpoints", next);
-                  }}
-                />
-              </label>
-            ))}
-            {services.includes("s3api") &&
-              text("prefix", "目录", { placeholder: "可选，以 / 结尾" })}
-            {services.includes("s3api") &&
-              choices(
-                "allowedCommands",
-                "S3 命令",
-                objectCommands,
-                objectCommands,
-              )}
-          </div>
-        </details>
-      </>
+      </>,
+      <>
+        {services.map((service) => (
+          <label key={service}>
+            {service.toUpperCase()} 地址
+            <input
+              type="url"
+              value={endpoints?.[service] ?? ""}
+              placeholder="留空使用官方地址"
+              maxLength={1000}
+              onChange={(event) => {
+                const next = { ...endpoints };
+                if (event.target.value) next[service] = event.target.value;
+                else delete next[service];
+                change("endpoints", next);
+              }}
+            />
+          </label>
+        ))}
+        {services.includes("s3api") &&
+          text("prefix", "对象前缀（可选）", {
+            placeholder: "例如 project/",
+            note: "留空表示整个桶；填写时以 / 结尾。",
+          })}
+        {services.includes("s3api") &&
+          choices("allowedCommands", "S3 命令", objectCommands, objectCommands)}
+      </>,
     );
   }
   if (connection.kind === "registry")
-    return (
+    return renderFields(
       <>
         {text("endpoint", "地址", {
           required: true,
@@ -803,46 +887,43 @@ export function ConnectionFields({
           "basic",
         )}
         {list("allowedRepositories", "仓库", true, "org/image，多个用逗号分隔")}
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">
-            {choices(
-              "allowedCommands",
-              "命令",
-              [
-                "ping",
-                "catalog",
-                "tags",
-                "manifest-get",
-                "manifest-head",
-                "manifest-put",
-                "manifest-delete",
-                "blob-get",
-                "blob-head",
-                "blob-put",
-                "blob-delete",
-              ],
-              [
-                "ping",
-                "catalog",
-                "tags",
-                "manifest-get",
-                "manifest-head",
-                "manifest-put",
-                "manifest-delete",
-                "blob-get",
-                "blob-head",
-                "blob-put",
-                "blob-delete",
-              ],
-            )}
-            {privateServiceOptions}
-          </div>
-        </details>
-      </>
+      </>,
+      <>
+        {choices(
+          "allowedCommands",
+          "命令",
+          [
+            "ping",
+            "catalog",
+            "tags",
+            "manifest-get",
+            "manifest-head",
+            "manifest-put",
+            "manifest-delete",
+            "blob-get",
+            "blob-head",
+            "blob-put",
+            "blob-delete",
+          ],
+          [
+            "ping",
+            "catalog",
+            "tags",
+            "manifest-get",
+            "manifest-head",
+            "manifest-put",
+            "manifest-delete",
+            "blob-get",
+            "blob-head",
+            "blob-put",
+            "blob-delete",
+          ],
+        )}
+        {privateServiceOptions}
+      </>,
     );
   if (connection.kind === "docker")
-    return (
+    return renderFields(
       <>
         {text("endpoint", "地址", {
           required: true,
@@ -859,16 +940,13 @@ export function ConnectionFields({
           ],
           "mtls",
         )}
-        <details>
-          <summary>选项</summary>
-          <div className="option-fields">
-            {text("apiVersion", "API 版本", { placeholder: "v1.47" })}
-            {check("trustedPrivate", "内网连接")}
-          </div>
-        </details>
-      </>
+      </>,
+      <>
+        {text("apiVersion", "API 版本", { placeholder: "v1.47" })}
+        {check("trustedPrivate", "内网连接")}
+      </>,
     );
-  return (
+  return renderFields(
     <>
       {text("endpoint", "地址", {
         required: true,
@@ -885,26 +963,23 @@ export function ConnectionFields({
         "bearer",
       )}
       {text("namespace", "命名空间", { required: true })}
-      <details>
-        <summary>选项</summary>
-        <div className="option-fields">
-          {list("namespaces", "命名空间范围", false, "可选，多个用逗号分隔")}
-          {choices(
-            "resources",
-            "资源",
-            [
-              ...kubeNamespaced,
-              "namespaces",
-              "nodes",
-              "persistentvolumes",
-              "storageclasses",
-            ],
-            kubeNamespaced,
-          )}
-          {check("trustedPrivate", "内网连接")}
-        </div>
-      </details>
-    </>
+    </>,
+    <>
+      {list("namespaces", "命名空间范围", false, "可选，多个用逗号分隔")}
+      {choices(
+        "resources",
+        "资源",
+        [
+          ...kubeNamespaced,
+          "namespaces",
+          "nodes",
+          "persistentvolumes",
+          "storageclasses",
+        ],
+        kubeNamespaced,
+      )}
+      {check("trustedPrivate", "内网连接")}
+    </>,
   );
 }
 function ArrayField({
@@ -923,8 +998,9 @@ function ArrayField({
   const [draft, setDraft] = useState(value.join(", "));
   return (
     <label>
-      {label}
+      <FieldLabel required={required}>{label}</FieldLabel>
       <input
+        aria-label={label}
         value={draft}
         placeholder={placeholder}
         required={required}
