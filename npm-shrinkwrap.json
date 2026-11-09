@@ -45,7 +45,8 @@
       },
       "engines": {
         "node": ">=22.12"
-      }
+      },
+      "license": "MIT"
     },
     "node_modules/@aws-sdk/checksums": {
       "version": "3.1001.1",

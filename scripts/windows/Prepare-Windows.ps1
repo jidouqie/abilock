@@ -40,7 +40,7 @@ function Copy-PublicTree([string]$Source, [string]$Target) {
 [IO.Directory]::CreateDirectory($destination) | Out-Null
 try {
     $package = [IO.File]::ReadAllText((Join-Path $runtime 'package.json')) | ConvertFrom-Json
-    foreach ($name in @('package.json', 'npm-shrinkwrap.json', 'request-limits.json', 'LICENSE', 'README.md', 'bin', 'dist', 'docs', 'node_modules', 'skills/abilock')) {
+    foreach ($name in @('package.json', 'npm-shrinkwrap.json', 'request-limits.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'bin', 'dist', 'docs', 'node_modules', 'skills/abilock')) {
         Copy-PublicTree (Join-Path $runtime $name) (Join-Path $destination ('runtime\' + $name))
     }
     Copy-PublicTree $desktop (Join-Path $destination 'desktop')

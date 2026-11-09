@@ -1,4 +1,4 @@
-include LICENSE package.json package-lock.json pyproject.toml setup.py
+include LICENSE THIRD_PARTY_NOTICES.md package.json package-lock.json pyproject.toml setup.py
 include request-limits.json
 include python/README.md python/build_support.py
 recursive-include python/abilock *.py

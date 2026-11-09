@@ -57,6 +57,7 @@
     ".env.example",
     "README.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "native/desktop/**",
     "native/windows/**",
     "scripts/windows/*.ps1",
@@ -76,7 +77,8 @@
     "test": "tsx --test tests/*.test.ts",
     "test:ui": "tsx scripts/ui-check.ts",
     "check": "npm run lint && npm run typecheck && npm run build && npm test",
-    "abl": "node bin/abl.mjs"
+    "abl": "node bin/abl.mjs",
+    "check:public": "node scripts/check-public-source.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.1146.0",
@@ -110,5 +112,6 @@
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.46.0",
     "vite": "^7.1.0"
-  }
+  },
+  "license": "MIT"
 }

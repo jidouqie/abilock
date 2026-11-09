@@ -39,3 +39,15 @@ build/
 **/master.key
 **/installation.json
 **/backups/
+# Local account configuration and credential containers.
+/.abilock/
+/.aws/
+/.ssh/
+**/.npmrc
+**/.netrc
+**/.git-credentials
+**/id_rsa
+**/id_ed25519
+*.p12
+*.pfx
+*.keychain-db

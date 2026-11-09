@@ -123,7 +123,7 @@ export async function prepareIsolation(destination, progress = () => {}) {
   try {
     const runtime = path.join(target, "runtime");
     await fs.mkdir(runtime);
-    for (const name of ["package.json", "npm-shrinkwrap.json", "request-limits.json", "LICENSE", "README.md", "bin", "dist/request-limits.json", "dist/src", "dist/web", "docs", "native", "scripts/isolation-install.py", "scripts/install-macos.sh", "scripts/prepare-isolation.mjs", "scripts/build-isolation-launcher.mjs", "scripts/build-file-lock.mjs", "scripts/verify-isolation.py", "skills/abilock/SKILL.md", "skills/abilock/agents/openai.yaml", "skills/abilock/references"])
+    for (const name of ["package.json", "npm-shrinkwrap.json", "request-limits.json", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "bin", "dist/request-limits.json", "dist/src", "dist/web", "docs", "native", "scripts/isolation-install.py", "scripts/install-macos.sh", "scripts/prepare-isolation.mjs", "scripts/build-isolation-launcher.mjs", "scripts/build-file-lock.mjs", "scripts/verify-isolation.py", "skills/abilock/SKILL.md", "skills/abilock/agents/openai.yaml", "skills/abilock/references"])
       await copyPublicTree(path.join(sourceRoot, name), path.join(runtime, name));
     await fs.copyFile(path.join(sourceRoot, "scripts/install-macos.sh"), path.join(target, "Install.command"));
     await fs.chmod(path.join(target, "Install.command"), 0o755);

@@ -14,14 +14,14 @@ Skill 是用户的主要入口，CLI 和 UI 是它依赖的执行与管理能力
 
 ## 从项目源码准备（macOS）
 
-项目仓库为 https://github.com/jidouqie/abilock，当前是私有源码仓库；需要用户已有 GitHub 访问权限。本次未提供在线二进制 Release 或 npm 包，不猜测下载地址。已有连接的用户先检查安装状态，已可使用时直接进入任务，不重复安装。
+项目公开源码为 https://github.com/jidouqie/abilock，克隆不要求 GitHub 登录。本次未提供在线二进制 Release 或 npm 包，不猜测下载地址。已有连接的用户先检查安装状态，已可使用时直接进入任务，不重复安装。
 
-源码路线需要已有 GitHub CLI 登录、Git、Node.js ≥22.12、npm、macOS 13+、Python 3 和 Apple 命令行工具。由助手检查这些公开依赖，不读取认证配置或令牌。缺少账号权限、需要登录或系统确认时，明确交给用户处理，不自行创建长期认证。
+源码路线需要 Git、Node.js ≥22.12、npm、macOS 13+、Python 3 和 Apple 命令行工具。由助手检查这些公开依赖，不读取认证配置或令牌。获取公开源码不需要创建账号或认证；依赖缺失或需要系统确认时，明确交给用户处理，不自行创建长期认证。
 
 在无同名目录的位置运行：
 
 ```sh
-gh repo clone jidouqie/abilock && node abilock/scripts/install-from-source.mjs
+git clone https://github.com/jidouqie/abilock.git && node abilock/scripts/install-from-source.mjs
 ```
 
 已有可信检出时，在仓库运行 `node scripts/install-from-source.mjs --check` 只检查依赖与已提交源码，`--prepare-only` 构建并校验公开包而不检查现有安装状态；不带参数才做完整安装预检和安装。入口使用当前干净提交在临时目录构建并校验，成功后交给相同的 `Install.command`，不是绕过安装器或权限的替代路径。版本与完整性、依赖下载或测试失败时停止，不能改用未验证的替代包。实际下载、构建和管理员授权需要时间与用户配合，不承诺一句提示词在任何宿主都能全自动完成。

@@ -34,12 +34,12 @@ Abilock 想省掉这段折腾。
 
 > 请从 https://github.com/jidouqie/abilock 按 README 和 Skill 首次使用说明安装 Abilock。先检查是否已安装，再核对来源、版本和系统架构，安装 Skill、CLI 与应用；保留已有连接和数据。系统授权与密码输入交给我，不读取我的密钥。
 
-**安装前提：** 需要私有仓库访问权限，以及能操作本机的助手。依赖准备和系统授权仍需用户配合，不保证所有宿主都能全自动安装。
+**安装前提：** 需要能操作本机的助手和对应系统的构建依赖。公开源码可直接获取；依赖准备和系统授权仍需用户配合，不保证所有宿主都能全自动安装。
 
 <details>
 <summary>安装内容、权限与缺项处理</summary>
 
-项目仓库：[jidouqie/abilock](https://github.com/jidouqie/abilock)。当前为私有源码仓库，访问需要账号已有权限；本次没有发布在线二进制 Release 或 npm 包。
+项目仓库：[jidouqie/abilock](https://github.com/jidouqie/abilock)，源码采用 MIT 许可证。本次仅公开源码，没有发布在线二进制 Release 或 npm 包。
 
 完整安装将 **Skill、CLI、独立应用和受保护运行依赖** 一起准备好。只复制 Skill 文本不会获得凭据隔离或执行能力，不要运行猜测的 `npm install abilock` 或未经核验的下载命令。
 
@@ -49,10 +49,10 @@ Abilock 想省掉这段折腾。
 
 ### 一条命令安装源码版（macOS）
 
-需要已登录且获准访问此私有仓库的 GitHub CLI（`gh`）、Git、Node.js ≥22.12、npm、macOS 13+、系统 Python 3 与 Apple 命令行工具。在尚无 `abilock` 同名目录的位置运行：
+需要 Git、Node.js ≥22.12、npm、macOS 13+、系统 Python 3 与 Apple 命令行工具。在尚无 `abilock` 同名目录的位置运行，不需要 GitHub 登录：
 
 ```sh
-gh repo clone jidouqie/abilock && node abilock/scripts/install-from-source.mjs
+git clone https://github.com/jidouqie/abilock.git && node abilock/scripts/install-from-source.mjs
 ```
 
 已有可信源码检出时，可在仓库中运行 `node scripts/install-from-source.mjs`；加 `--check` 只检查依赖与已提交源码，加 `--prepare-only` 只构建并校验公开安装包。二者都不安装；实际安装才检查已安装程序是否空闲并请求授权。入口使用当前干净提交，在临时目录构建与验证后交给原 `Install.command`，仍由用户完成系统授权。下载、完整性或验证失败就停止，不重置用户数据。依赖缺失会明确报告，不自动安装第三方工具。
@@ -201,6 +201,8 @@ npm run check
 
 贡献前阅读 [AGENTS.md](AGENTS.md)、[贡献说明](CONTRIBUTING.md)和[架构](docs/architecture.md)，保持 Skill、CLI 与管理页的角色清楚。提交最小改动、相应回归和准确限制；不要提交 `.env`、真实连接、私钥、用户数据、日志、安装备份或私人验收截图。安全问题不要把真实凭据放进 issue。
 
+每次推送或发布前运行 `npm run check:public`，检查工作树、暂存区和 Git 历史中的公开风险。脱敏要求长期有效，覆盖代码、示例、文档、截图、日志和发布附件；具体规则见[公开内容检查](docs/security/publication.md)。自动检查不能替代人工确认，不能把“未检出”当作绝对没有秘密。
+
 [Skill](skills/abilock/SKILL.md) · [首次使用](skills/abilock/references/onboarding.md) · [学习手册](skills/abilock/references/learning.md) · [调用经验](docs/experience.md) · [连接测试](docs/connection-testing.md) · [架构](docs/architecture.md)
 
-作者：[吉豆茄 jidouqie](https://v.douyin.com/oApPI_L9avQ)。代码采用 [MIT 许可证](LICENSE)；第三方原始资料遵循各自许可。
+作者：[吉豆茄 jidouqie](https://v.douyin.com/oApPI_L9avQ)。代码采用 [MIT 许可证](LICENSE)；第三方原始资料遵循各自许可，见[第三方声明](THIRD_PARTY_NOTICES.md)。
