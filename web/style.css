@@ -843,19 +843,24 @@ input[type="password"]::-webkit-caps-lock-indicator {
   color: var(--danger);
 }
 .connection-row-feedback {
-  padding: 0 var(--row-inset) 14px calc(var(--row-inset) + var(--glyph) + 12px);
+  margin-top: -4px;
+  padding: 0 var(--row-inset) 12px calc(var(--row-inset) + var(--glyph) + 12px);
 }
 .connection-row-feedback > [role="cell"] {
   min-width: 0;
 }
+/* An ordinary result is one quiet line under the row: a dot, the verdict and
+   what was actually checked. Only a result that needs a decision (choosing a
+   model, accepting a possible charge) opens into a panel. */
 .test-result,
 .connection-test-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: baseline;
   width: 100%;
-  padding: 11px 14px;
-  border-radius: 10px;
-  background: var(--surface-2);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
@@ -863,35 +868,91 @@ input[type="password"]::-webkit-caps-lock-indicator {
   grid-column: 1 / -1;
 }
 .test-result-heading {
-  display: flex;
+  display: contents;
+}
+.test-result-heading strong {
+  grid-column: 1;
+  grid-row: 1;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  color: var(--text);
-  font-size: 13px;
+  gap: 6px;
   font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.test-result-heading strong::before {
+  content: "";
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
 }
 .test-result-heading span {
-  font-size: 12px;
-  font-weight: 400;
+  grid-column: 3;
+  grid-row: 1;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.test-result-heading + p {
-  margin-top: 2px;
+.test-result > p {
+  grid-column: 2;
+  grid-row: 1;
 }
-.test-result-meta {
+.test-result > .test-result-meta {
+  grid-column: 2 / -1;
+  grid-row: 2;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 14px;
-  margin-top: 6px;
+  margin-top: 1px;
   color: var(--text-3);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.test-result > button {
+.test-result-verified .test-result-heading strong {
+  color: var(--ok);
+}
+.test-result-verified .test-result-heading strong::before {
+  background: var(--ok-dot);
+}
+.test-result-reachable .test-result-heading strong,
+.test-result-unsupported .test-result-heading strong,
+.test-result-confirmation .test-result-heading strong {
+  color: var(--warn);
+}
+.test-result-reachable .test-result-heading strong::before,
+.test-result-unsupported .test-result-heading strong::before,
+.test-result-confirmation .test-result-heading strong::before {
+  background: var(--warn-dot);
+}
+.test-result-failed .test-result-heading strong {
+  color: var(--danger);
+}
+.test-result-failed .test-result-heading strong::before {
+  background: var(--danger-dot);
+}
+.test-result-pending .test-result-heading strong::before {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--accent-ring);
+  border-top-color: var(--accent);
+  background: transparent;
+  animation: spin 0.8s linear infinite;
+}
+.test-result-confirmation {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.test-result-confirmation > button,
+.model-test-confirmation {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+.test-result-confirmation > button {
+  justify-self: start;
   margin-top: 10px;
 }
 .model-test-confirmation {
@@ -918,43 +979,6 @@ input[type="password"]::-webkit-caps-lock-indicator {
 .test-cancel {
   color: var(--text-2);
   background: transparent;
-}
-.test-result-verified {
-  background: var(--ok-soft);
-}
-.test-result-verified .test-result-heading {
-  color: var(--ok);
-}
-.test-result-reachable,
-.test-result-unsupported,
-.test-result-confirmation {
-  background: var(--warn-soft);
-}
-.test-result-reachable .test-result-heading,
-.test-result-unsupported .test-result-heading,
-.test-result-confirmation .test-result-heading {
-  color: var(--warn);
-}
-.test-result-failed {
-  background: var(--danger-soft);
-}
-.test-result-failed .test-result-heading {
-  color: var(--danger);
-}
-.test-result-pending {
-  background: var(--accent-soft);
-}
-.test-result-pending .test-result-heading strong::before {
-  content: "";
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid var(--accent-ring);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  margin-right: 8px;
-  vertical-align: -2px;
-  animation: spin 0.8s linear infinite;
 }
 
 .list-empty {
