@@ -44,7 +44,7 @@ export type ConnectionTestControls = {
   onConfirm: (model?: string) => void;
 };
 
-function sameValue(left: unknown, right: unknown): boolean {
+export function sameValue(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
   if (Array.isArray(left) !== Array.isArray(right)) return false;

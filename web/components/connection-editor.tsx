@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   ConnectionFields,
+  blankConnection,
   connectionLabels,
   credentialFields,
   type Connection,
@@ -12,6 +13,7 @@ import { FieldLabel } from "./field-label.js";
 import {
   ConnectionTest,
   connectionTestUnavailable,
+  sameValue,
   type ConnectionTestControls,
 } from "./connection-test.js";
 
@@ -57,12 +59,19 @@ export function ConnectionEditor({
   onKeyError: (message: string) => void;
   onKind: (kind: ConnectionKind | "api") => void;
   onClose: () => void;
-  onSubmit: (event: React.FormEvent) => void;
+  onSubmit: (event: React.FormEvent, trustBoundary: Connection["trustBoundary"]) => void;
 }) {
   const dirty =
     Object.values(secrets).some(Boolean) ||
-    JSON.stringify(edit) !== JSON.stringify(original ?? edit);
+    JSON.stringify(edit) !== JSON.stringify(original ?? blankConnection(edit.kind));
   const replacing = Object.values(secrets).some(Boolean);
+  const changingSshIdentity = (edit.kind === "ssh" ||
+    (edit.kind === "git" && edit.config.transport === "ssh")) && sshIdentity !== "keep";
+  const trustCheckbox = useRef<HTMLInputElement>(null);
+  const requiresTrustConfirmation = edit.trustBoundary !== "development-fixture" && (
+    original?.trustBoundary !== "independent-target" || original.kind !== edit.kind ||
+    !sameValue(edit.config, original.config) || replacing || changingSshIdentity
+  );
   const changedAuth =
     !!original &&
     ((original.config.auth ?? original.config.authType) !==
@@ -75,15 +84,16 @@ export function ConnectionEditor({
       (!edit.hasSecret ||
         changedAuth ||
         replacing ||
-        ((edit.kind === "ssh" ||
-          (edit.kind === "git" && edit.config.transport === "ssh")) &&
-          sshIdentity !== "keep"));
+        changingSshIdentity);
     const retaining = edit.hasSecret && !changedAuth && !required && !replacing &&
-      !((edit.kind === "ssh" || (edit.kind === "git" && edit.config.transport === "ssh")) && sshIdentity !== "keep");
+      !changingSshIdentity;
     const placeholder = retaining ? "全部留空保留已保存凭据" : !field.required ? "可留空" : "";
     const label = `${field.label}${!field.required ? "（可选）" : retaining ? "（留空保留）" : ""}`;
-    const update = (value: string) =>
+    const update = (value: string) => {
+      if (value === (secrets[field.key] ?? "")) return;
+      if (trustCheckbox.current) trustCheckbox.current.checked = false;
       onSecrets((current) => ({ ...current, [field.key]: value }));
+    };
     return (
       <label key={field.key}>
         <FieldLabel required={required}>
@@ -135,7 +145,15 @@ export function ConnectionEditor({
       dirty={dirty}
     >
       {configurationAlert}
-      <form onSubmit={onSubmit}>
+      <form onSubmit={(event) => {
+        let trustBoundary = edit.trustBoundary;
+        if (requiresTrustConfirmation) {
+          trustBoundary = new FormData(event.currentTarget).get("trustBoundary") === "independent-target"
+            ? "independent-target"
+            : undefined;
+        }
+        onSubmit(event, trustBoundary);
+      }}>
         <fieldset disabled={busy || keyReading || !configurationReady}>
           {!original && <label>
             类型
@@ -211,7 +229,7 @@ export function ConnectionEditor({
             </div>
           </details>
           {original && (
-            <label className="check">
+            <label className="check switch">
               <input
                 type="checkbox"
                 checked={edit.enabled}
@@ -220,21 +238,18 @@ export function ConnectionEditor({
               启用
             </label>
           )}
-          {edit.trustBoundary !== "development-fixture" && (
+          {requiresTrustConfirmation && (
             <label className="check trust-check">
               <input
-                aria-label="远端无权管理 Abilock 所在电脑"
+                key={JSON.stringify([edit.kind, edit.config, sshIdentity])}
+                ref={trustCheckbox}
+                aria-label="我确认远端及所用账号无法管理 Abilock 所在电脑"
+                name="trustBoundary"
                 type="checkbox"
+                value="independent-target"
                 required
-                checked={edit.trustBoundary === "independent-target"}
-                onChange={(event) =>
-                  onEdit({
-                    ...edit,
-                    trustBoundary: event.target.checked ? "independent-target" : undefined,
-                  })
-                }
               />
-              <FieldLabel required>远端无权管理 Abilock 所在电脑</FieldLabel>
+              <FieldLabel required>我确认远端及所用账号无法管理 Abilock 所在电脑</FieldLabel>
             </label>
           )}
         </fieldset>

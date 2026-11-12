@@ -2,7 +2,7 @@ import React from "react";
 import { connectionLabels, type ConnectionKind } from "./connection-form.js";
 import { Modal } from "./modal.js";
 import { FieldLabel } from "./field-label.js";
-import { authIdentity, type Platform } from "./platform-form.js";
+import { authIdentity, blankPlatform, type Platform } from "./platform-form.js";
 import { ConnectionTest, connectionTestUnavailable, type ConnectionTestControls } from "./connection-test.js";
 
 const authLabels: Record<string, string> = {
@@ -62,7 +62,9 @@ export function PlatformEditor({
   const dirty =
     !!secret ||
     !!username ||
-    JSON.stringify(edit) !== JSON.stringify(original ?? edit);
+    // A new connection is compared with the empty form, so typed fields ask
+    // before an accidental Escape or backdrop click discards them.
+    JSON.stringify(edit) !== JSON.stringify(original ?? blankPlatform);
   return (
     <Modal title={original ? "编辑" : "添加"} onClose={onClose} busy={busy} dirty={dirty}>
       {configurationAlert}
@@ -229,7 +231,7 @@ export function PlatformEditor({
             </div>
           </details>
           {original && (
-            <label className="check">
+            <label className="check switch">
               <input
                 type="checkbox"
                 checked={edit.enabled}

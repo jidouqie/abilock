@@ -8,7 +8,7 @@ const logo = new URL("../assets/abilock-logo.png", import.meta.url).href;
 export function Brand() {
   return (
     <div className="brand">
-      <img src={logo} alt="" />
+      <span className="app-icon"><img src={logo} alt="" /></span>
       <span>Abilock</span>
     </div>
   );
@@ -38,7 +38,7 @@ export function LoginView({
   return (
     <main className="login">
       <div className="login-card">
-        <img className="login-logo" src={logo} alt="" />
+        <span className="app-icon login-logo"><img src={logo} alt="" /></span>
         <h1 className="login-brand">Abilock</h1>
         <h2>{!ready ? "加载中" : initial ? "设置管理密码" : "登录"}</h2>
         <p className="login-hint">

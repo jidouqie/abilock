@@ -78,7 +78,7 @@ export const LayersIcon = () => (
     <path d="M4 10.2l6 3.2 6-3.2M4 13.2l6 3.2 6-3.2" />
   </Icon>
 );
-// A monogram tile per protocol: colour groups the family, letters name it.
+// A monogram tile per protocol: a solid colour per family, letters name it.
 const glyphs: Record<ConnectionKind | "api", { text: string; tone: string }> = {
   api: { text: "API", tone: "cobalt" },
   ssh: { text: "SSH", tone: "graphite" },
@@ -90,7 +90,7 @@ const glyphs: Record<ConnectionKind | "api", { text: string; tone: string }> = {
   aws: { text: "AWS", tone: "amber" },
   registry: { text: "REG", tone: "violet" },
   docker: { text: "DKR", tone: "sky" },
-  kubernetes: { text: "K8s", tone: "cobalt" },
+  kubernetes: { text: "K8s", tone: "indigo" },
 };
 export function ProtocolGlyph({
   kind,

@@ -184,12 +184,15 @@ async function learn(alias: string) {
   for (const key of keys) assert.ok(!document.stdout.includes(key));
   checks.push(`${alias}: AI 学习公开fixture接口，CLI读取用法不含鉴权`);
 }
-async function readManual(page: Page, alias: string) {
+async function openManual(page: Page, alias: string) {
   const navigation = page.getByRole("complementary", { name: "导航" });
   await navigation
     .getByRole("button")
     .filter({ has: page.getByText(alias, { exact: true }) })
     .click();
+}
+async function readManual(page: Page, alias: string) {
+  await openManual(page, alias);
   const manual = page.locator(".manual-panel");
   await manual.getByRole("heading", { name: alias, exact: true }).waitFor();
   if (store.platform(alias).note)
@@ -397,7 +400,7 @@ async function checkSshTestControls(page: Page) {
   request = nextRequest();
   await button.click();
   await request;
-  await ssh.getByRole("button", { name: "UI_SSH", exact: true }).click();
+  await openManual(page, "UI_SSH");
   respond({ status: 200, body: result() });
   await page.locator(".manual-panel h1").filter({ hasText: "UI_SSH" }).waitFor();
   await page.locator(".manual-panel").getByRole("button", { name: "返回", exact: true }).click();
@@ -406,6 +409,39 @@ async function checkSshTestControls(page: Page) {
   await page.unroute("**/admin/connections/UI_SSH/test-plan");
   await page.unroute("**/admin/connections/UI_SSH/connection-test");
   checks.push("统一测试：防重复、草稿禁用、错误脱敏、显式取消、导航返回不保留旧结果（合成 UI 响应）");
+
+  const confirmation = edit.getByRole("checkbox", { name: "我确认远端及所用账号无法管理 Abilock 所在电脑" });
+  await ssh.getByRole("button", { name: "UI_SSH", exact: true }).click();
+  await edit.getByLabel("别名", { exact: true }).fill("UI_SSH_RENAMED");
+  assert.equal(await page.locator(".manual-panel").count(), 0);
+  assert.equal(await confirmation.count(), 0);
+  await edit.getByRole("button", { name: "保存", exact: true }).click();
+  await edit.waitFor({ state: "hidden" });
+  const renamed = store.connection("ssh", "UI_SSH_RENAMED");
+  assert.equal(renamed.trustBoundary, "independent-target");
+
+  await row(page, "UI_SSH_RENAMED").locator(".cell-address").click();
+  const host = edit.getByLabel("主机", { exact: true });
+  await host.fill("other.example.invalid");
+  assert.equal(await confirmation.isChecked(), false);
+  await confirmation.check();
+  await host.fill("replacement.example.invalid");
+  assert.equal(await confirmation.isChecked(), false);
+  await edit.getByLabel("鉴权", { exact: true }).selectOption("password");
+  const replacementPassword = edit.getByLabel("密码", { exact: true });
+  await replacementPassword.fill("synthetic-replacement-password");
+  await confirmation.check();
+  await replacementPassword.fill("synthetic-final-password");
+  assert.equal(await confirmation.isChecked(), false);
+  await edit.getByRole("button", { name: "保存", exact: true }).click();
+  assert.equal(store.connection("ssh", "UI_SSH_RENAMED").revision, renamed.revision);
+  await confirmation.check();
+  await edit.getByRole("button", { name: "保存", exact: true }).click();
+  await edit.waitFor({ state: "hidden" });
+  const changed = store.connection("ssh", "UI_SSH_RENAMED");
+  assert.equal(changed.config.host, "replacement.example.invalid");
+  assert.equal(changed.trustBoundary, "independent-target");
+  checks.push("改别名保留已确认的权限边界，更换目标或凭据时必须重新确认");
 }
 
 async function checkApiTestControls(page: Page) {
@@ -419,8 +455,9 @@ async function checkApiTestControls(page: Page) {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.screenshot({ path: "artifacts/ui-2.2.11/connections-dark.png", fullPage: true, animations: "disabled" });
   await page.emulateMedia({ colorScheme: "light" });
-  await apiRow.getByRole("button", { name: "编辑", exact: true }).click();
+  await apiRow.getByRole("button", { name: "UI_BEARER", exact: true }).press("Enter");
   const edit = page.getByRole("dialog", { name: "编辑", exact: true });
+  assert.equal(await page.locator(".manual-panel").count(), 0);
   assert.equal(await edit.getByRole("button", { name: "测试连接", exact: true }).isEnabled(), true);
   await edit.getByLabel("密钥", { exact: true }).fill("synthetic-unsaved-api-secret");
   assert.equal(await edit.getByRole("button", { name: "测试连接", exact: true }).isDisabled(), true);
@@ -565,7 +602,7 @@ async function checkDoubaoGenerationConfirmation(page: Page) {
 
   await openPlan();
   await selection.selectOption(mini);
-  await apiRow.getByRole("button", { name: alias, exact: true }).click();
+  await openManual(page, alias);
   await page.locator(".manual-panel h1").filter({ hasText: alias }).waitFor();
   await page.locator(".manual-panel").getByRole("button", { name: "返回", exact: true }).click();
   assert.equal(await feedback.count(), 0);

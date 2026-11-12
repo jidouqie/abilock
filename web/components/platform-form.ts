@@ -27,6 +27,18 @@ export type Platform = {
   updatedAt?: string;
 };
 
+export const blankPlatform: Platform = {
+  alias: "",
+  note: "",
+  name: "",
+  baseUrl: "",
+  description: "",
+  auth: { type: "bearer" },
+  rules: [],
+  enabled: true,
+  allowInsecureLocal: false,
+};
+
 export function authIdentity(auth: Platform["auth"]) {
   return JSON.stringify([
     auth.type,

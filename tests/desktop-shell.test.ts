@@ -58,68 +58,116 @@ test("desktop has no arbitrary native bridge, URL argument, private-file read, o
   assert.match(source, /argc != 1/);
   assert.match(source, /fileHandleForWriting closeFile/);
   assert.match(source, /self\.configuration terminate/);
+  assert.match(source, /addItemWithTitle:@"Close Window" action:@selector\(performClose:\) keyEquivalent:@"w"/);
+  assert.doesNotMatch(source, /addLocalMonitorForEventsMatchingMask|closeHint|closeKeyTimer|windowShouldClose:/);
   assert.doesNotMatch(source, /addScriptMessageHandler|evaluateJavaScript|\/private\/var\/db|service\.env|vault\.json|killall|pkill|system\(|popen\(/);
 });
 
-test("desktop close hold cancels on key release, modifier release and loss of focus", { skip: process.platform !== "darwin" }, async () => {
+test("desktop shutdown closes only its owned configuration input", { skip: process.platform !== "darwin" }, async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "abilock-desktop-close-"));
   try {
-    // Exercise the event handler and real run-loop timers without posting any
-    // keyboard events or opening a window on the user's desktop.
+    // Exercise the production shutdown handler with two harmless pipe readers;
+    // no desktop window, protected launcher or actual configuration is opened.
     const harness = `
 #define main ABLApplicationMain
 #import ${JSON.stringify(path.resolve("native/desktop/Abilock.m"))}
 #undef main
 #include <assert.h>
-@interface TestApplication : NSApplication @end
-@implementation TestApplication
-- (BOOL)isActive { return YES; }
-@end
-@interface TestDelegate : AbilockApplication
-@property NSUInteger prompts;
-@property NSUInteger closes;
-@end
-@implementation TestDelegate
-- (void)showClosePrompt { self.prompts++; }
-- (void)confirmWindowClose:(id)sender { (void)sender; self.closes++; [self cancelCloseHold]; }
-@end
-static NSEvent *key(NSEventType type, NSEventModifierFlags flags, BOOL repeat) {
-  return [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:flags timestamp:0
-    windowNumber:0 context:nil characters:@"w" charactersIgnoringModifiers:@"w" isARepeat:repeat keyCode:13];
+static NSTask *reader(NSPipe *input) {
+  NSTask *task = [[NSTask alloc] init];
+  task.executableURL = [NSURL fileURLWithPath:@"/bin/cat"];
+  task.environment = @{};
+  task.standardInput = input;
+  task.standardOutput = [NSFileHandle fileHandleWithNullDevice];
+  task.standardError = [NSFileHandle fileHandleWithNullDevice];
+  assert([task launchAndReturnError:NULL]);
+  return task;
 }
-static void waitForTimer(void) {
-  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:1.1]];
+static void awaitReader(NSTask *task) {
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
+  while (task.running && deadline.timeIntervalSinceNow > 0)
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+  assert(!task.running);
+  assert(task.terminationReason == NSTaskTerminationReasonExit && task.terminationStatus == 0);
 }
 int main(void) { @autoreleasepool {
-  [TestApplication sharedApplication];
-  TestDelegate *app = [[TestDelegate alloc] init];
-  NSEvent *down = key(NSEventTypeKeyDown, NSEventModifierFlagCommand, NO);
-  assert([app handleCloseKey:down] == nil && app.closeKeyDown);
-  [app handleCloseKey:key(NSEventTypeKeyUp, NSEventModifierFlagCommand, NO)];
-  waitForTimer();
-  assert(app.prompts == 2 && app.closes == 0 && !app.closeKeyDown);
-  [app handleCloseKey:down];
-  [app handleCloseKey:key(NSEventTypeFlagsChanged, 0, NO)];
-  waitForTimer();
-  assert(app.prompts == 4 && app.closes == 0 && !app.closeKeyDown);
-  [app handleCloseKey:down];
-  [app applicationDidResignActive:[NSNotification notificationWithName:NSApplicationDidResignActiveNotification object:NSApp]];
-  waitForTimer();
-  assert(app.prompts == 5 && app.closes == 0 && !app.closeKeyDown);
-  [app handleCloseKey:key(NSEventTypeKeyDown, NSEventModifierFlagCommand, YES)];
-  assert(!app.closeKeyDown && app.closeKeyTimer == nil);
-  [app handleCloseKey:down];
-  waitForTimer();
-  assert(app.closes == 1 && !app.closeKeyDown && app.closeKeyTimer == nil);
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 300, 100)
-    styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:YES];
-  assert(![app windowShouldClose:window]);
-  app.failed = YES;
-  assert([app windowShouldClose:window]);
+  [NSApplication sharedApplication];
+  AbilockApplication *app = [[AbilockApplication alloc] init];
+  app.input = [NSPipe pipe];
+  app.configuration = reader(app.input);
+  NSPipe *otherInput = [NSPipe pipe];
+  NSTask *other = reader(otherInput);
+  @try {
+    assert([app applicationShouldTerminateAfterLastWindowClosed:NSApp]);
+    NSApplicationTerminateReply reply = [app applicationShouldTerminate:NSApp];
+    assert(reply == NSTerminateCancel || reply == NSTerminateNow);
+    assert(app.stopping && app.input == nil);
+    awaitReader(app.configuration);
+    assert([app applicationShouldTerminate:NSApp] == NSTerminateNow);
+    assert(other.running);
+    [otherInput.fileHandleForWriting closeFile];
+    awaitReader(other);
+  } @finally {
+    if (app.configuration.running) [app.configuration terminate];
+    if (other.running) [other terminate];
+  }
 } return 0; }
 `;
     const source = path.join(directory, "close.m");
     const executable = path.join(directory, "close");
+    await fs.writeFile(source, harness);
+    execFileSync("/usr/bin/cc", ["-fobjc-arc", "-Wall", "-Wextra", "-Werror", "-framework", "AppKit", "-framework", "WebKit",
+      source, path.resolve("native/desktop/desktop-policy.m"), "-o", executable]);
+    execFileSync(executable, { timeout: 10000 });
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("desktop page fills the window while a native strip keeps the title bar draggable", { skip: process.platform !== "darwin" }, async () => {
+  const shell = await fs.readFile("native/desktop/Abilock.m", "utf8");
+  assert.match(shell, /NSWindowStyleMaskFullSizeContentView/);
+  assert.match(shell, /titlebarAppearsTransparent = YES/);
+  assert.match(shell, /applicationNameForUserAgent = @"AbilockDesktop"/);
+  assert.match(shell, /\[self installPage:self\.webView\]/);
+  const page = await fs.readFile("web/main.tsx", "utf8");
+  assert.match(page, /AbilockDesktop/);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "abilock-desktop-titlebar-"));
+  try {
+    // The window is deferred and never ordered front, so nothing appears on
+    // the desktop. A plain view stands in for the page.
+    const harness = `
+#define main ABLApplicationMain
+#import ${JSON.stringify(path.resolve("native/desktop/Abilock.m"))}
+#undef main
+#include <assert.h>
+static void check(NSWindow *window, NSView *page) {
+  NSView *content = window.contentView;
+  assert(page.superview == content && NSEqualRects(page.frame, content.bounds));
+  CGFloat top = NSHeight(content.bounds);
+  NSView *strip = [content hitTest:NSMakePoint(NSWidth(content.bounds) / 2, top - 4)];
+  assert([strip isKindOfClass:[ABLTitlebarStrip class]]);
+  assert(NSWidth(strip.frame) == NSWidth(content.bounds) && NSMaxY(strip.frame) == top);
+  assert(NSHeight(strip.frame) >= 22 && NSHeight(strip.frame) <= 60);
+  assert([content hitTest:NSMakePoint(NSWidth(content.bounds) / 2, top - NSHeight(strip.frame) - 4)] == page);
+  assert([content hitTest:NSMakePoint(8, 8)] == page);
+}
+int main(void) { @autoreleasepool {
+  [NSApplication sharedApplication];
+  AbilockApplication *app = [[AbilockApplication alloc] init];
+  app.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 900, 600)
+    styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskFullSizeContentView
+    backing:NSBackingStoreBuffered defer:YES];
+  NSView *page = [[NSView alloc] initWithFrame:NSZeroRect];
+  [app installPage:page];
+  check(app.window, page);
+  [app.window setContentSize:NSMakeSize(1300, 820)];
+  check(app.window, page);
+  assert(!app.window.visible);
+} return 0; }
+`;
+    const source = path.join(directory, "titlebar.m");
+    const executable = path.join(directory, "titlebar");
     await fs.writeFile(source, harness);
     execFileSync("/usr/bin/cc", ["-fobjc-arc", "-Wall", "-Wextra", "-Werror", "-framework", "AppKit", "-framework", "WebKit",
       source, path.resolve("native/desktop/desktop-policy.m"), "-o", executable]);

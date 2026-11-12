@@ -68,7 +68,6 @@ export function ConnectionList({
   actionsDisabled,
   connectionTest,
   onAdd,
-  onSelect,
   onEditPlatform,
   onEditConnection,
   onRemove,
@@ -87,7 +86,6 @@ export function ConnectionList({
     onConfirm: (connection: Platform | Connection, model?: string) => void;
   };
   onAdd: () => void;
-  onSelect: (alias: string) => void;
   onEditPlatform: (platform: Platform) => void;
   onEditConnection: (connection: Connection) => void;
   onRemove: (item: Platform | Connection) => void;
@@ -120,6 +118,10 @@ export function ConnectionList({
       {visible.map((item, index) => {
         const kind = "baseUrl" in item ? "api" : item.kind;
         const label = "baseUrl" in item ? "API" : connectionLabels[item.kind];
+        const openEditor = () => {
+          if ("baseUrl" in item) onEditPlatform(item);
+          else onEditConnection(item);
+        };
         return (
           <Fragment key={`${kind}:${item.alias}`}>
           <div
@@ -127,15 +129,16 @@ export function ConnectionList({
             className="connection-row"
             style={{ "--row": Math.min(index, 12) } as CSSProperties}
             onClick={(event) => {
-              // The row is a large target for the manual; its own controls win.
-              if (!(event.target as HTMLElement).closest("button, a, input"))
-                onSelect(item.alias);
+              // Dragging across the address to copy it ends in a click too.
+              if (!actionsDisabled && event.target instanceof Element &&
+                !event.target.closest("button, a, input") &&
+                !window.getSelection()?.toString()) openEditor();
             }}
           >
             <div role="cell" className="cell-identity">
               <ProtocolGlyph kind={kind} />
               <div className="identity-text">
-                <button className="alias-button" onClick={() => onSelect(item.alias)}>
+                <button className="alias-button" disabled={actionsDisabled} onClick={openEditor}>
                   {item.alias}
                 </button>
                 {item.note ? (
@@ -170,9 +173,7 @@ export function ConnectionList({
                 aria-label="编辑"
                 title="编辑"
                 disabled={actionsDisabled}
-                onClick={() =>
-                  "baseUrl" in item ? onEditPlatform(item) : onEditConnection(item)
-                }
+                onClick={openEditor}
               >
                 <PencilIcon />
               </button>

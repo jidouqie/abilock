@@ -10,6 +10,10 @@ Navigation stays on that exact origin. New windows, downloads, native script bri
 
 The unified installer prepares the protected runtime before opening the app. A standalone app without that runtime stops and requests installation. Closing the app closes its own input pipe, then signals only its own launcher if graceful shutdown needs assistance. A crashed app also closes that pipe; the configuration worker exits on EOF.
 
+Command-W, File > Close Window, and the red window button close the window immediately using the standard AppKit close action. No hold gesture or close hint is required. Closing the last window follows the owned-session shutdown path described above.
+
+The page fills the whole window under a transparent title bar, so the sidebar reaches the top edge beside the window buttons. A native strip the height of the title bar stays above the page and keeps the standard drag and double-click behaviour; it draws nothing and exchanges nothing with the page. The shell appends `AbilockDesktop` to the WKWebView user agent, and the page uses that public marker only to leave room for the window buttons. It is not a bridge and grants nothing.
+
 Build on macOS with `node scripts/build-desktop.mjs`. The output is a universal arm64/x86_64 app in `artifacts/desktop/Abilock.app`, supporting macOS 13 or later. The local build has an ad-hoc signature; public distribution still requires the publisher's Developer ID signing and notarization. Compilation and policy tests do not substitute for an interactive desktop acceptance run.
 
 ## Windows

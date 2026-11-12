@@ -34,7 +34,7 @@ test("API and every saved protocol have a test entry with a separate full-width 
   const html = renderToStaticMarkup(React.createElement(ConnectionList, {
     platforms: [api], connections, filter: "全部", query: "", actionsDisabled: false,
     connectionTest: { disabled: false, pending: null, result, onTest() {}, onCancel() {}, onConfirm() {} },
-    onAdd() {}, onSelect() {}, onEditPlatform() {}, onEditConnection() {}, onRemove() {},
+    onAdd() {}, onEditPlatform() {}, onEditConnection() {}, onRemove() {},
   }));
   assert.equal((html.match(/>测试连接<\/button>/g) ?? []).length, connectionKinds.length + 1);
   assert.equal((html.match(/role="columnheader"/g) ?? []).length, 4);

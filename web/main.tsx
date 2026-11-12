@@ -12,7 +12,7 @@ import {
 import { ManualEditor, manualDraft, manualWrite, type ManualDraft, type SavedManual } from "./components/manual-edit.js";
 import { validPasswordLength } from "../src/password-policy.js";
 import { connectionTestError, connectionTestUnavailable, readConnectionTestPlan, type ConnectionTestResult, type TestableConnection } from "./components/connection-test.js";
-import { platformWrite, type Platform } from "./components/platform-form.js";
+import { blankPlatform, platformWrite, type Platform } from "./components/platform-form.js";
 import {
   configurationRestartMessage,
   isConfigurationCompatible,
@@ -40,6 +40,10 @@ import { ManualPanel } from "./components/manual-panel.js";
 import { PlatformEditor } from "./components/platform-editor.js";
 import { ConnectionEditor } from "./components/connection-editor.js";
 import { Brand, LoginView, PasswordDialog } from "./components/auth-forms.js";
+// The macOS app draws this page under its title bar and names itself in the
+// user agent. That is layout information only; it grants nothing.
+if (/\bAbilockDesktop\b/.test(navigator.userAgent))
+  document.documentElement.classList.add("shell-mac");
 type SavedDoc = SavedManual;
 type ProtocolGuide = {
   alias: string;
@@ -52,17 +56,6 @@ type AuthState = {
   legacy: boolean;
   authenticated: boolean;
   csrfToken?: string;
-};
-const blank: Platform = {
-  alias: "",
-  note: "",
-  name: "",
-  baseUrl: "",
-  description: "",
-  auth: { type: "bearer" },
-  rules: [],
-  enabled: true,
-  allowInsecureLocal: false,
 };
 function App() {
   const [authState, setAuthState] = useState<AuthState | null>(null);
@@ -137,8 +130,11 @@ function App() {
         (current.plan?.generation ? "。服务商已受理的请求仍可能计费。" : ""),
     } : null);
   }
+  // An error raised inside a dialog belongs to that dialog: closing it must
+  // not leave the message on the page behind.
   function closeEdit() {
     clearConnectionTest();
+    if (edit) setError("");
     setEdit(null);
     setOriginal(null);
     setSecret("");
@@ -146,6 +142,7 @@ function App() {
   }
   function closeConnection() {
     clearConnectionTest();
+    if (connectionEdit) setError("");
     setConnectionEdit(null);
     setConnectionOriginal(null);
     setSshIdentity("password");
@@ -412,6 +409,7 @@ function App() {
     }
   }
   function closePassword() {
+    setError("");
     setPasswordEdit(false);
     setPassword("");
     setConfirmation("");
@@ -452,7 +450,7 @@ function App() {
   function beginEdit(platform?: Platform) {
     setError("");
     setOriginal(platform ? structuredClone(platform) : null);
-    setEdit(structuredClone(platform ?? blank));
+    setEdit(structuredClone(platform ?? blankPlatform));
     setSecret("");
     setUsername("");
   }
@@ -575,15 +573,16 @@ function App() {
       }
     }
   }
-  async function saveConnection(event: React.FormEvent) {
+  async function saveConnection(event: React.FormEvent, trustBoundary: Connection["trustBoundary"]) {
     event.preventDefault();
     if (!connectionEdit) return;
     setBusy(true);
     setError("");
     try {
       requireConfigurationCompatible(formVersion);
+      if (!trustBoundary) throw new Error("请确认远端及所用账号无法管理 Abilock 所在电脑");
       const body = connectionWrite(
-        connectionEdit,
+        { ...connectionEdit, trustBoundary },
         connectionOriginal,
         connectionSecrets,
         sshIdentity,
@@ -809,7 +808,6 @@ function App() {
                   onConfirm: (connection, model) => void testSavedConnection(connection, false, true, model),
                 }}
                 onAdd={() => beginAdd()}
-                onSelect={setSelectedManual}
                 onEditPlatform={beginEdit}
                 onEditConnection={beginConnection}
                 onRemove={(item) => void remove(item)}
