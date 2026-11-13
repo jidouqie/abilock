@@ -27,7 +27,7 @@ const plan: ConnectionTestPlan = {
 };
 const result: ConnectionTestResult = { alias: api.alias, revision: 4, status: "verified", message: "已确认鉴权。", plan, durationMs: 125 };
 
-test("API and every saved protocol have a test entry with a separate full-width result row", () => {
+test("API and every saved protocol have a test entry, and a pass shows in the row's state without an extra row", () => {
   const connections = connectionKinds.map((kind) => ({
     ...blankConnection(kind), alias: `FIXTURE_${kind.toUpperCase()}`, name: kind, hasSecret: true, revision: 1,
   }));
@@ -38,9 +38,24 @@ test("API and every saved protocol have a test entry with a separate full-width 
   }));
   assert.equal((html.match(/>测试连接<\/button>/g) ?? []).length, connectionKinds.length + 1);
   assert.equal((html.match(/role="columnheader"/g) ?? []).length, 4);
-  assert.match(html, /class="connection-row-feedback"/);
+  assert.match(html, /class="status connection-test-status test-status-verified" role="status"/);
+  assert.doesNotMatch(html, /class="connection-row-feedback"/);
   assert.match(html, /鉴权通过/);
   assert.match(html, /0\.1 秒/);
+  // What was checked stays in the markup for a tooltip and assistive technology.
+  assert.match(html, /class="sr-only">已确认鉴权。 Synthetic provider/);
+  const list = (next: ConnectionTestResult) => renderToStaticMarkup(React.createElement(ConnectionList, {
+    platforms: [api], connections: [], filter: "全部", query: "", actionsDisabled: false,
+    connectionTest: { disabled: false, pending: null, result: next, onTest() {}, onCancel() {}, onConfirm() {} },
+    onAdd() {}, onEditPlatform() {}, onEditConnection() {}, onRemove() {},
+  }));
+  const failed = list({ ...result, status: "failed", message: "鉴权失败，请检查账号和凭据", durationMs: undefined });
+  assert.match(failed, /test-status-failed/);
+  assert.match(failed, /class="connection-row-feedback".*class="test-note test-note-failed" role="alert">鉴权失败，请检查账号和凭据/);
+  const confirmation = list({ ...result, status: "confirmation", plan: { ...plan, billing: "possible" } });
+  assert.doesNotMatch(confirmation, /connection-test-status/);
+  assert.match(confirmation, /class="connection-row-feedback".*等待确认/);
+  assert.doesNotMatch(list({ ...result, revision: 3 }), /connection-test-status|connection-row-feedback/);
 });
 
 test("test availability rejects unsaved credentials, drafts, stale revisions and disabled connections", () => {

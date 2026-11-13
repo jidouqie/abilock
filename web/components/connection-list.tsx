@@ -11,6 +11,8 @@ import type { Platform } from "./platform-form.js";
 import {
   ConnectionTest,
   ConnectionTestFeedback,
+  ConnectionTestNote,
+  ConnectionTestStatus,
   connectionTestUnavailable,
   type ConnectionTestResult,
 } from "./connection-test.js";
@@ -118,6 +120,9 @@ export function ConnectionList({
       {visible.map((item, index) => {
         const kind = "baseUrl" in item ? "api" : item.kind;
         const label = "baseUrl" in item ? "API" : connectionLabels[item.kind];
+        const unavailable = connectionTestUnavailable(item);
+        const tested = !unavailable && connectionTest.result?.alias === item.alias &&
+          connectionTest.result.revision === item.revision ? connectionTest.result : null;
         const openEditor = () => {
           if ("baseUrl" in item) onEditPlatform(item);
           else onEditConnection(item);
@@ -154,12 +159,14 @@ export function ConnectionList({
               </span>
             </div>
             <div role="cell" className="cell-status">
-              <StatusBadge item={item} />
+              {tested && tested.status !== "confirmation"
+                ? <ConnectionTestStatus connection={item} result={tested} />
+                : <StatusBadge item={item} />}
             </div>
             <div role="cell" className="row-actions">
                 <ConnectionTest
                   connection={item}
-                  unavailable={connectionTestUnavailable(item)}
+                  unavailable={unavailable}
                   pending={connectionTest.pending === item.alias}
                   disabled={connectionTest.disabled}
                   result={connectionTest.result}
@@ -188,11 +195,13 @@ export function ConnectionList({
               </button>
             </div>
           </div>
-          {connectionTest.result?.alias === item.alias && connectionTest.result.revision === item.revision && (
+          {tested && ["confirmation", "failed", "unsupported", "reachable"].includes(tested.status) && (
             <div role="row" className="connection-row-feedback">
               <div role="cell" aria-colspan={4}>
-                <ConnectionTestFeedback connection={item} unavailable={connectionTestUnavailable(item)} result={connectionTest.result}
-                  onConfirm={(model) => connectionTest.onConfirm(item, model)} />
+                {tested.status === "confirmation"
+                  ? <ConnectionTestFeedback connection={item} result={tested}
+                      onConfirm={(model) => connectionTest.onConfirm(item, model)} />
+                  : <ConnectionTestNote connection={item} result={tested} />}
               </div>
             </div>
           )}

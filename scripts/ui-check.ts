@@ -346,9 +346,10 @@ async function checkSshTestControls(page: Page) {
   assert.equal(await ssh.getByRole("button", { name: "测试中…", exact: true }).isDisabled(), true);
   assert.equal(calls, 1);
   respond({ status: 200, body: result() });
-  await page.locator(".connection-row-feedback").getByText("鉴权通过", { exact: true }).waitFor();
+  await ssh.locator(".connection-test-status").getByText("鉴权通过", { exact: true }).waitFor();
+  assert.equal(await page.locator(".connection-row-feedback").count(), 0, "a pass adds no row under the connection");
   await page.getByRole("button", { name: "刷新", exact: true }).click();
-  await page.locator(".connection-row-feedback").waitFor({ state: "hidden" });
+  await page.locator(".connection-test-status").waitFor({ state: "hidden" });
 
   await ssh.getByRole("button", { name: "编辑", exact: true }).click();
   const edit = page.getByRole("dialog", { name: "编辑", exact: true });
@@ -447,7 +448,8 @@ async function checkSshTestControls(page: Page) {
 async function checkApiTestControls(page: Page) {
   const apiRow = row(page, "UI_BEARER");
   await apiRow.getByRole("button", { name: "测试连接", exact: true }).click();
-  await page.locator(".connection-row-feedback").getByText("尚未验证", { exact: true }).waitFor();
+  await apiRow.locator(".connection-test-status").getByText("尚未验证", { exact: true }).waitFor();
+  await page.locator(".connection-row-feedback .test-note").waitFor();
   assert.equal(mock!.calls.length, 0, "unknown provider test must not contact the upstream");
   await page.locator(".toast").waitFor({ state: "hidden" });
   await page.mouse.move(0, 0);
@@ -585,7 +587,8 @@ async function checkDoubaoGenerationConfirmation(page: Page) {
   assert.equal(calls, 1, "duplicate confirmation clicks must send only one synthetic request");
   assert.equal(await apiRow.getByRole("button", { name: "测试中…", exact: true }).isDisabled(), true);
   respond({ status: 200, body: result() });
-  await feedback.getByText("合成模型响应通过；未向真实服务发送请求。", { exact: true }).waitFor();
+  await apiRow.locator(".connection-test-status").getByText("模型调用通过", { exact: true }).waitFor();
+  assert.ok((await apiRow.locator(".connection-test-status").textContent())?.includes("合成模型响应通过；未向真实服务发送请求。"));
   assert.equal(calls, 1);
 
   await openPlan();
@@ -595,9 +598,9 @@ async function checkDoubaoGenerationConfirmation(page: Page) {
   await confirm.click();
   await request;
   await apiRow.getByRole("button", { name: "取消测试", exact: true }).click();
-  await feedback.getByText("已取消", { exact: true }).waitFor();
+  await apiRow.locator(".connection-test-status").getByText("已取消", { exact: true }).waitFor();
   respond({ status: 200, body: result() });
-  assert.equal(await feedback.getByText("合成模型响应通过；未向真实服务发送请求。", { exact: true }).count(), 0);
+  assert.ok(!(await apiRow.textContent())?.includes("合成模型响应通过；未向真实服务发送请求。"));
   assert.equal(calls, 2, "cancellation must not retry a possibly accepted generation");
 
   await openPlan();
@@ -617,7 +620,8 @@ async function checkDoubaoGenerationConfirmation(page: Page) {
   await feedback.getByRole("alert").waitFor();
   assert.ok((await feedback.textContent())?.includes("所选模型未开通"));
   assert.ok(!(await feedback.textContent())?.includes("synthetic-private-provider-detail"));
-  assert.equal(await feedback.getByText("鉴权通过", { exact: true }).count(), 0);
+  assert.equal(await apiRow.getByText("鉴权通过", { exact: true }).count(), 0);
+  await apiRow.locator(".connection-test-status").getByText("验证未通过", { exact: true }).waitFor();
   await page.screenshot({ path: "artifacts/feedback-2.2.11/doubao-model-permission.png", fullPage: true, animations: "disabled" });
   assert.equal(calls, 3);
   assert.equal(mock!.calls.length, upstreamCallsBefore);

@@ -133,6 +133,50 @@ const labels: Record<ConnectionTestResult["status"], string> = {
   failed: "验证未通过", cancelled: "已取消", pending: "正在验证",
   confirmation: "等待确认",
 };
+function planSummary(plan: ConnectionTestPlan) {
+  return `${plan.provider}${plan.method ? ` · ${plan.method}${plan.path ? ` ${plan.path}` : ""}` : ""}` +
+    ` · ${plan.level === "generation" ? "验证一次模型调用" : plan.level === "authentication" ? "验证鉴权" : plan.level === "service" ? "仅验证服务响应" : "未调用服务"}` +
+    ` · ${plan.billing === "none" ? "无生成调用" : "可能产生请求费用"}` +
+    (plan.model ? ` · ${plan.model}` : "");
+}
+function currentResult(connection: TestableConnection, unavailable: string, result?: ConnectionTestResult | null) {
+  return !unavailable && result?.alias === connection.alias && result.revision === connection.revision ? result : null;
+}
+
+// In the list a result takes the place of the row's configuration state: a
+// dot, the verdict and the duration. What was checked stays available as a
+// tooltip and to assistive technology, so a pass never claims more than it did.
+export function ConnectionTestStatus({ connection, unavailable = "", result }: {
+  connection: TestableConnection;
+  unavailable?: string;
+  result?: ConnectionTestResult | null;
+}) {
+  const current = currentResult(connection, unavailable, result);
+  if (!current || current.status === "confirmation") return null;
+  const detail = current.plan ? `${current.message} ${planSummary(current.plan)}` : current.message;
+  return <span className={`status connection-test-status test-status-${current.status}`} role="status" title={detail}>
+    <span className="status-dot" aria-hidden="true" />
+    <span>{current.status === "verified" && current.plan?.generation ? "模型调用通过" : labels[current.status]}</span>
+    {current.durationMs !== undefined && <span className="test-duration">{(current.durationMs / 1000).toFixed(1)} 秒</span>}
+    <span className="sr-only">{detail}</span>
+  </span>;
+}
+
+// A result that did not confirm the credential says why, in one line under
+// the row. A pass, a pending test and a cancellation need no second line.
+export function ConnectionTestNote({ connection, unavailable = "", result }: {
+  connection: TestableConnection;
+  unavailable?: string;
+  result?: ConnectionTestResult | null;
+}) {
+  const current = currentResult(connection, unavailable, result);
+  if (!current || !["failed", "unsupported", "reachable"].includes(current.status)) return null;
+  return <p className={`test-note test-note-${current.status}`} role={current.status === "failed" ? "alert" : "status"}>
+    {current.message}
+    {current.plan && <span className="test-note-meta">{planSummary(current.plan)}</span>}
+  </p>;
+}
+
 export function ConnectionTestFeedback({ connection, unavailable = "", result, onConfirm }: {
   connection: TestableConnection;
   unavailable?: string;
@@ -150,12 +194,7 @@ export function ConnectionTestFeedback({ connection, unavailable = "", result, o
       {result.durationMs !== undefined && <span>{(result.durationMs / 1000).toFixed(1)} 秒</span>}
     </div>
     <p>{result.message}</p>
-    {plan && <p className="test-result-meta">
-      {plan.provider}{plan.method ? ` · ${plan.method}${plan.path ? ` ${plan.path}` : ""}` : ""}
-      {` · ${plan.level === "generation" ? "验证一次模型调用" : plan.level === "authentication" ? "验证鉴权" : plan.level === "service" ? "仅验证服务响应" : "未调用服务"}`}
-      {` · ${plan.billing === "none" ? "无生成调用" : "可能产生请求费用"}`}
-      {plan.model ? ` · ${plan.model}` : ""}
-    </p>}
+    {plan && <p className="test-result-meta">{planSummary(plan)}</p>}
     {result.status === "confirmation" && onConfirm && (generation ? <div className="model-test-confirmation">
       <label>测试模型<select aria-label="测试模型" value={model} onChange={(event) => setModel(event.target.value)}>
         <option value="">请选择本次测试的模型</option>
